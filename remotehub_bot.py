@@ -3,7 +3,6 @@ import re
 import logging
 import aiohttp
 import discord
-from discord.ext import commands
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -13,6 +12,18 @@ GAS_URL = os.environ.get(
     "GAS_URL",
     "https://script.google.com/macros/s/AKfycbxDM-TKpvY8VWG8DGuAdqZVKsogAU56mehr6XBVEMM4EKUj4ksrDyQpjl6E9yMXjWY75A/exec",
 )
+
+# 監視対象の親チャンネル名
+TARGET_CHANNELS = {
+    "五味八珍-cs",
+    "不動産cs",
+    "採用面談-代行",
+    "出勤報告部屋",
+    "サロン-公式line返信",
+}
+
+# 上記チャンネル配下で報告を拾う子チャンネル名（スレッド・カテゴリ内チャンネル）
+REPORT_CHILD_KEYWORDS = {"報告スペース", "報告", "件数報告"}
 
 REPORT_FIELDS = ["日付", "件数", "伝達事項", "その他"]
 
@@ -47,6 +58,38 @@ def is_report_message(content: str) -> bool:
     return count >= 2
 
 
+def resolve_channel(channel) -> tuple[bool, str, str]:
+    """
+    対象チャンネルかどうかを判定し、(対象か, 親チャンネル名, チャンネル名) を返す。
+
+    判定ルール:
+    - チャンネル名が TARGET_CHANNELS に一致 → 対象
+    - スレッドで、スレッド名が REPORT_CHILD_KEYWORDS に一致 かつ
+      親チャンネルが TARGET_CHANNELS に一致 → 対象
+    - カテゴリ内チャンネルで、チャンネル名が REPORT_CHILD_KEYWORDS に一致 かつ
+      カテゴリ名が TARGET_CHANNELS に一致 → 対象
+    """
+    name = channel.name
+
+    # 直接チャンネル名が対象
+    if name in TARGET_CHANNELS:
+        parent_name = channel.category.name if hasattr(channel, "category") and channel.category else ""
+        return True, parent_name, name
+
+    # スレッド（Thread）の場合
+    if isinstance(channel, discord.Thread):
+        if name in REPORT_CHILD_KEYWORDS and channel.parent and channel.parent.name in TARGET_CHANNELS:
+            return True, channel.parent.name, name
+
+    # カテゴリ内の通常チャンネル
+    if name in REPORT_CHILD_KEYWORDS:
+        category = getattr(channel, "category", None)
+        if category and category.name in TARGET_CHANNELS:
+            return True, category.name, name
+
+    return False, "", name
+
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -63,6 +106,11 @@ async def on_ready():
 async def on_message(message: discord.Message):
     if message.author.bot:
         return
+
+    is_target, parent_channel, channel_name = resolve_channel(message.channel)
+    if not is_target:
+        return
+
     if not is_report_message(message.content):
         return
 
@@ -72,7 +120,8 @@ async def on_message(message: discord.Message):
 
     payload = {
         "member": message.author.display_name,
-        "channel": message.channel.name,
+        "channel": parent_channel or channel_name,
+        "sub_channel": channel_name if parent_channel else "",
         "date": report.get("日付", ""),
         "count": report.get("件数", ""),
         "notes": report.get("伝達事項", ""),
@@ -81,7 +130,7 @@ async def on_message(message: discord.Message):
         "timestamp": message.created_at.isoformat(),
     }
 
-    logger.info("Sending report from %s in #%s", payload["member"], payload["channel"])
+    logger.info("Sending report from %s in #%s/%s", payload["member"], payload["channel"], payload["sub_channel"])
 
     async with aiohttp.ClientSession() as session:
         try:
