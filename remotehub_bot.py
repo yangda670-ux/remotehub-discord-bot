@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import logging
 import aiohttp
 import discord
@@ -99,6 +100,24 @@ def resolve_channel(channel) -> tuple[str | None, str]:
     return None, name
 
 
+async def post_to_gas(session: aiohttp.ClientSession, payload: dict) -> int:
+    """
+    GAS /exec は302リダイレクトを返す。
+    aiohttpはデフォルトでPOSTをGETに変換して追うため e.postData が undefined になる。
+    allow_redirects=False でリダイレクト先を取得し、POSTのまま再送する。
+    """
+    headers = {"Content-Type": "application/json"}
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    timeout = aiohttp.ClientTimeout(total=15)
+
+    async with session.post(GAS_URL, data=body, headers=headers, timeout=timeout, allow_redirects=False) as resp:
+        location = resp.headers.get("Location")
+        if resp.status in (301, 302, 303, 307, 308) and location:
+            async with session.post(location, data=body, headers=headers, timeout=timeout) as final:
+                return final.status
+        return resp.status
+
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -178,14 +197,13 @@ async def on_message(message: discord.Message):
 
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post(GAS_URL, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                if resp.status == 200:
-                    await message.add_reaction("✅")
-                    logger.info("GAS accepted (200)")
-                else:
-                    body = await resp.text()
-                    logger.error("GAS returned %s: %s", resp.status, body)
-                    await message.add_reaction("❌")
+            status = await post_to_gas(session, payload)
+            if status == 200:
+                await message.add_reaction("✅")
+                logger.info("GAS accepted (200)")
+            else:
+                logger.error("GAS returned %s", status)
+                await message.add_reaction("❌")
         except Exception as e:
             logger.exception("Failed to POST to GAS: %s", e)
             await message.add_reaction("❌")
