@@ -13,19 +13,27 @@ GAS_URL = os.environ.get(
     "https://script.google.com/macros/s/AKfycbxDM-TKpvY8VWG8DGuAdqZVKsogAU56mehr6XBVEMM4EKUj4ksrDyQpjl6E9yMXjWY75A/exec",
 )
 
-# 監視対象の親チャンネル名
-TARGET_CHANNELS = {
-    "五味八珍-cs",
-    "不動産cs",
-    "採用面談-代行",
-    "出勤報告部屋",
-    "サロン-公式line返信",
+# チャンネル名 → 単価（円/件）。None は報酬計算対象外（勤怠管理のみ）
+CHANNEL_RATES: dict[str, int | None] = {
+    "五味八珍-cs": 50,
+    "不動産cs": 50,
+    "株式会社sou": 80,
+    "採用面談-代行": 300,
+    "サロン-公式line返信": 10,
+    "出勤報告部屋": None,
 }
 
 # 上記チャンネル配下で報告を拾う子チャンネル名（スレッド・カテゴリ内チャンネル）
 REPORT_CHILD_KEYWORDS = {"報告スペース", "報告", "件数報告"}
 
 REPORT_FIELDS = ["日付", "件数", "伝達事項", "その他"]
+
+# 出勤報告部屋でログイン時刻として認識するキーワード
+LOGIN_PATTERNS = [
+    re.compile(r"ログイン[：:]\s*(.+)"),
+    re.compile(r"出勤[：:]\s*(.+)"),
+    re.compile(r"開始[：:]\s*(.+)"),
+]
 
 
 def parse_report(content: str) -> dict:
@@ -58,36 +66,37 @@ def is_report_message(content: str) -> bool:
     return count >= 2
 
 
-def resolve_channel(channel) -> tuple[bool, str, str]:
-    """
-    対象チャンネルかどうかを判定し、(対象か, 親チャンネル名, チャンネル名) を返す。
+def parse_login_time(content: str) -> str | None:
+    for pattern in LOGIN_PATTERNS:
+        m = pattern.search(content)
+        if m:
+            return m.group(1).strip()
+    return None
 
-    判定ルール:
-    - チャンネル名が TARGET_CHANNELS に一致 → 対象
-    - スレッドで、スレッド名が REPORT_CHILD_KEYWORDS に一致 かつ
-      親チャンネルが TARGET_CHANNELS に一致 → 対象
-    - カテゴリ内チャンネルで、チャンネル名が REPORT_CHILD_KEYWORDS に一致 かつ
-      カテゴリ名が TARGET_CHANNELS に一致 → 対象
+
+def resolve_channel(channel) -> tuple[str | None, str]:
+    """
+    対象チャンネルを特定し (親チャンネル名, チャンネル名) を返す。
+    対象外の場合は (None, チャンネル名) を返す。
     """
     name = channel.name
 
-    # 直接チャンネル名が対象
-    if name in TARGET_CHANNELS:
+    if name in CHANNEL_RATES:
         parent_name = channel.category.name if hasattr(channel, "category") and channel.category else ""
-        return True, parent_name, name
+        return name, parent_name
 
-    # スレッド（Thread）の場合
+    # スレッドの場合：スレッド名が子チャンネルキーワードで、親が対象チャンネル
     if isinstance(channel, discord.Thread):
-        if name in REPORT_CHILD_KEYWORDS and channel.parent and channel.parent.name in TARGET_CHANNELS:
-            return True, channel.parent.name, name
+        if name in REPORT_CHILD_KEYWORDS and channel.parent and channel.parent.name in CHANNEL_RATES:
+            return channel.parent.name, name
 
-    # カテゴリ内の通常チャンネル
+    # カテゴリ内チャンネルの場合
     if name in REPORT_CHILD_KEYWORDS:
         category = getattr(channel, "category", None)
-        if category and category.name in TARGET_CHANNELS:
-            return True, category.name, name
+        if category and category.name in CHANNEL_RATES:
+            return category.name, name
 
-    return False, "", name
+    return None, name
 
 
 intents = discord.Intents.default()
@@ -107,37 +116,72 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
-    is_target, parent_channel, channel_name = resolve_channel(message.channel)
-    if not is_target:
+    parent_channel, sub_channel = resolve_channel(message.channel)
+    if parent_channel is None:
         return
 
-    if not is_report_message(message.content):
-        return
+    rate = CHANNEL_RATES[parent_channel]
+    is_attendance = rate is None  # 出勤報告部屋など報酬計算対象外
 
-    report = parse_report(message.content)
-    if not report:
-        return
+    if is_attendance:
+        # 勤怠管理：ログイン時刻を記録
+        login_time = parse_login_time(message.content)
+        if login_time is None:
+            return
 
-    payload = {
-        "member": message.author.display_name,
-        "channel": parent_channel or channel_name,
-        "sub_channel": channel_name if parent_channel else "",
-        "date": report.get("日付", ""),
-        "count": report.get("件数", ""),
-        "notes": report.get("伝達事項", ""),
-        "other": report.get("その他", ""),
-        "message_url": message.jump_url,
-        "timestamp": message.created_at.isoformat(),
-    }
+        payload = {
+            "type": "attendance",
+            "member": message.author.display_name,
+            "channel": parent_channel,
+            "sub_channel": sub_channel if sub_channel != parent_channel else "",
+            "login_time": login_time,
+            "message_url": message.jump_url,
+            "timestamp": message.created_at.isoformat(),
+        }
+        logger.info("Attendance from %s at %s", payload["member"], login_time)
 
-    logger.info("Sending report from %s in #%s/%s", payload["member"], payload["channel"], payload["sub_channel"])
+    else:
+        # 件数報告：報酬計算
+        if not is_report_message(message.content):
+            return
+
+        report = parse_report(message.content)
+        if not report:
+            return
+
+        count_str = report.get("件数", "0")
+        try:
+            count = int(re.sub(r"[^\d]", "", count_str))
+        except ValueError:
+            count = 0
+
+        reward = count * rate
+
+        payload = {
+            "type": "report",
+            "member": message.author.display_name,
+            "channel": parent_channel,
+            "sub_channel": sub_channel if sub_channel != parent_channel else "",
+            "date": report.get("日付", ""),
+            "count": count,
+            "rate": rate,
+            "reward": reward,
+            "notes": report.get("伝達事項", ""),
+            "other": report.get("その他", ""),
+            "message_url": message.jump_url,
+            "timestamp": message.created_at.isoformat(),
+        }
+        logger.info(
+            "Report from %s in #%s: %d件 × %d円 = %d円",
+            payload["member"], parent_channel, count, rate, reward,
+        )
 
     async with aiohttp.ClientSession() as session:
         try:
             async with session.post(GAS_URL, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status == 200:
                     await message.add_reaction("✅")
-                    logger.info("GAS accepted report (200)")
+                    logger.info("GAS accepted (200)")
                 else:
                     body = await resp.text()
                     logger.error("GAS returned %s: %s", resp.status, body)
