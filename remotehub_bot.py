@@ -1,6 +1,5 @@
 import os
 import re
-import json
 import logging
 import aiohttp
 import discord
@@ -101,20 +100,11 @@ def resolve_channel(channel) -> tuple[str | None, str]:
 
 
 async def post_to_gas(session: aiohttp.ClientSession, payload: dict) -> int:
-    """
-    GAS /exec は302リダイレクトを返す。
-    aiohttpはデフォルトでPOSTをGETに変換して追うため e.postData が undefined になる。
-    allow_redirects=False でリダイレクト先を取得し、POSTのまま再送する。
-    """
-    headers = {"Content-Type": "application/json"}
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    """GAS WebApp にクエリパラメータ付きGETで送信する（doGet で受け取る）。"""
     timeout = aiohttp.ClientTimeout(total=15)
-
-    async with session.post(GAS_URL, data=body, headers=headers, timeout=timeout, allow_redirects=False) as resp:
-        location = resp.headers.get("Location")
-        if resp.status in (301, 302, 303, 307, 308) and location:
-            async with session.post(location, data=body, headers=headers, timeout=timeout) as final:
-                return final.status
+    # 日本語を含む値は urllib が自動でパーセントエンコードする
+    params = {k: str(v) for k, v in payload.items()}
+    async with session.get(GAS_URL, params=params, timeout=timeout) as resp:
         return resp.status
 
 
