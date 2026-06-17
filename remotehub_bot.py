@@ -195,7 +195,7 @@ async def on_message(message: discord.Message):
                 logger.error("GAS returned %s", status)
                 await message.add_reaction("❌")
         except Exception as e:
-            logger.exception("Failed to POST to GAS: %s", e)
+            logger.exception("Failed to GET from GAS: %s", e)
             await message.add_reaction("❌")
 
 
