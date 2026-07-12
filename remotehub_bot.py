@@ -17,11 +17,20 @@ GAS_URL = os.environ.get(
 CHANNEL_RATES: dict[str, int | None] = {
     "五味八珍-cs-🍚": 50,
     "不動産cs-🏠": 50,
-    "株式会社sou": 80,
+    "株式会社sou": 100,
     "採用面談-代行🏃‍♀️‍➡️": 300,
     "サロン-公式line返信": 10,
     "営業テレアポチーム": 1100,
+    "フェイシャルサロンLINE": 10,
+    "ウェブアプリCS": 50,
+    "タクシー案件": 120,
     "出勤報告部屋": None,
+}
+
+# チャンネル名 → {メンバー名: 単価}。CHANNEL_RATES より優先される例外単価
+MEMBER_RATE_OVERRIDES: dict[str, dict[str, int]] = {
+    "五味八珍-cs-🍚": {"こやま": 60},
+    "採用面談-代行🏃‍♀️‍➡️": {"ほの": 500},
 }
 
 # 上記チャンネル配下で報告を拾う子チャンネル名（スレッド・カテゴリ内チャンネル）
@@ -100,6 +109,15 @@ def resolve_channel(channel) -> tuple[str | None, str]:
     return None, name
 
 
+def resolve_rate(channel_name: str, member_name: str) -> int | None:
+    """チャンネルとメンバーから適用単価を決定する。MEMBER_RATE_OVERRIDES を優先し、
+    該当がなければ CHANNEL_RATES の値を使う。"""
+    overrides = MEMBER_RATE_OVERRIDES.get(channel_name, {})
+    if member_name in overrides:
+        return overrides[member_name]
+    return CHANNEL_RATES[channel_name]
+
+
 async def post_to_gas(session: aiohttp.ClientSession, payload: dict) -> int:
     """GAS WebApp にクエリパラメータ付きGETで送信する（doGet で受け取る）。"""
     timeout = aiohttp.ClientTimeout(total=15)
@@ -130,7 +148,7 @@ async def on_message(message: discord.Message):
     if parent_channel is None:
         return
 
-    rate = CHANNEL_RATES[parent_channel]
+    rate = resolve_rate(parent_channel, message.author.display_name)
     is_attendance = rate is None  # 出勤報告部屋など報酬計算対象外
 
     if is_attendance:
