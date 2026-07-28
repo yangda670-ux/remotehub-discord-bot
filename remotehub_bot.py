@@ -24,8 +24,6 @@ CHANNEL_RATES: dict[str, int | None] = {
     "フェイシャルサロンline": 10,
     "ウェブアプリcs": 50,
     "タクシー案件": 120,
-    "株式会社composure架電": 5000,  # 稼働日1件＝日額固定5,000円
-    "corder架電": 3250,  # 月予算70,000円を実稼働日数で按分する暫定目安単価（正式な按分計算はスプレッドシート側で行う）
     "経理": 1000,  # 時給制。件数欄に稼働時間を入力する運用
     "出勤報告部屋": None,
 }
@@ -36,10 +34,33 @@ MEMBER_RATE_OVERRIDES: dict[str, dict[str, int]] = {
     "採用面談-代行🏃‍♀️‍➡️": {"ほの": 500},
 }
 
+# 日額固定＋時間割のハイブリッド単価チャンネル（開始・終了時刻から実働時間を計算）
+# regular_hours: 規定時間 / day_rate: 規定時間ちょうどの日額 / overtime_rate: 規定時間超過分の円/時
+# revenue_rate: 案件側の売上計算用の円/時（外注費とは別に売上をBotから送信する）
+HYBRID_RATE_CHANNELS: dict[str, dict[str, float]] = {
+    "corder架電": {
+        "regular_hours": 8,
+        "day_rate": 6000,
+        "overtime_rate": 1000,
+        "revenue_rate": 1500,
+    },
+    "株式会社composure架電": {
+        "regular_hours": 9,
+        "day_rate": 6500,
+        "overtime_rate": 1000,
+        "revenue_rate": 1300,
+    },
+}
+
+# 固定月額報酬のため単価計算をしないチャンネル（報告は記録するのみ）
+FIXED_FEE_CHANNELS: dict[str, int] = {
+    "エアコン案件": 30000,
+}
+
 # 上記チャンネル配下で報告を拾う子チャンネル名（スレッド・カテゴリ内チャンネル）
 REPORT_CHILD_KEYWORDS = {"報告スペース", "報告", "件数報告", "報告チャンネル"}
 
-REPORT_FIELDS = ["日付", "件数", "伝達事項", "その他"]
+REPORT_FIELDS = ["日付", "件数", "伝達事項", "その他", "案件", "対応者", "開始時刻", "終了時刻"]
 
 # 出勤報告部屋でログイン時刻として認識するキーワード
 LOGIN_PATTERNS = [
@@ -47,6 +68,9 @@ LOGIN_PATTERNS = [
     re.compile(r"出勤[：:]\s*(.+)"),
     re.compile(r"開始[：:]\s*(.+)"),
 ]
+
+# 「9:00」「09時00分」などの時刻表記から分数（0時からの経過分）を読み取る
+TIME_PATTERN = re.compile(r"(\d{1,2})\s*[:：時]\s*(\d{1,2})?\s*分?")
 
 
 def parse_report(content: str) -> dict:
@@ -87,6 +111,20 @@ def parse_login_time(content: str) -> str | None:
     return None
 
 
+def parse_time_to_minutes(text: str) -> int | None:
+    """「9:00」「09時00分」等の時刻表記を0時からの経過分に変換する。"""
+    m = TIME_PATTERN.search(text.strip())
+    if not m:
+        return None
+    hour = int(m.group(1))
+    minute = int(m.group(2)) if m.group(2) else 0
+    return hour * 60 + minute
+
+
+# 対象チャンネル名の集合（CHANNEL_RATES / HYBRID_RATE_CHANNELS / FIXED_FEE_CHANNELS のいずれか）
+ALL_TRACKED_CHANNELS = set(CHANNEL_RATES) | set(HYBRID_RATE_CHANNELS) | set(FIXED_FEE_CHANNELS)
+
+
 def resolve_channel(channel) -> tuple[str | None, str]:
     """
     対象チャンネルを特定し (親チャンネル名, チャンネル名) を返す。
@@ -94,19 +132,19 @@ def resolve_channel(channel) -> tuple[str | None, str]:
     """
     name = channel.name
 
-    if name in CHANNEL_RATES:
+    if name in ALL_TRACKED_CHANNELS:
         parent_name = channel.category.name if hasattr(channel, "category") and channel.category else ""
         return name, parent_name
 
     # スレッドの場合：スレッド名が子チャンネルキーワードで、親が対象チャンネル
     if isinstance(channel, discord.Thread):
-        if name in REPORT_CHILD_KEYWORDS and channel.parent and channel.parent.name in CHANNEL_RATES:
+        if name in REPORT_CHILD_KEYWORDS and channel.parent and channel.parent.name in ALL_TRACKED_CHANNELS:
             return channel.parent.name, name
 
     # カテゴリ内チャンネルの場合
     if name in REPORT_CHILD_KEYWORDS:
         category = getattr(channel, "category", None)
-        if category and category.name in CHANNEL_RATES:
+        if category and category.name in ALL_TRACKED_CHANNELS:
             return category.name, name
 
     return None, name
@@ -119,6 +157,18 @@ def resolve_rate(channel_name: str, member_name: str) -> int | None:
     if member_name in overrides:
         return overrides[member_name]
     return CHANNEL_RATES[channel_name]
+
+
+def calc_hybrid_cost(worked_hours: float, cfg: dict) -> tuple[int, int]:
+    """(通常分の外注費, 残業分の外注費) を返す。
+    規定時間ちょうどで日額固定と一致するよう、通常時間単価は「日額 ÷ 規定時間」の小数値で計算し、
+    最後に円単位で丸める。"""
+    regular_hours = cfg["regular_hours"]
+    if worked_hours <= regular_hours:
+        normal_cost = round(cfg["day_rate"] / regular_hours * worked_hours)
+        return normal_cost, 0
+    overtime_cost = round((worked_hours - regular_hours) * cfg["overtime_rate"])
+    return int(cfg["day_rate"]), overtime_cost
 
 
 async def post_to_gas(session: aiohttp.ClientSession, payload: dict) -> int:
@@ -142,6 +192,142 @@ async def on_ready():
     logger.info("Bot ready: %s (ID: %s)", client.user, client.user.id)
 
 
+def build_attendance_payload(parent_channel: str, sub_channel: str, message: discord.Message) -> dict | None:
+    """出勤報告部屋など：ログイン時刻を記録するのみで報酬計算はしない。"""
+    login_time = parse_login_time(message.content)
+    if login_time is None:
+        return None
+
+    payload = {
+        "type": "attendance",
+        "member": message.author.display_name,
+        "channel": parent_channel,
+        "sub_channel": sub_channel if sub_channel != parent_channel else "",
+        "login_time": login_time,
+        "message_url": message.jump_url,
+        "timestamp": message.created_at.isoformat(),
+    }
+    logger.info("Attendance from %s at %s", payload["member"], login_time)
+    return payload
+
+
+def build_report_payload(parent_channel: str, sub_channel: str, message: discord.Message, rate: int) -> dict | None:
+    """件数×単価で報酬を計算する通常チャンネル向け。"""
+    if not is_report_message(message.content):
+        return None
+
+    report = parse_report(message.content)
+    if not report:
+        return None
+
+    count_str = report.get("件数", "0")
+    try:
+        count = int(re.sub(r"[^\d]", "", count_str))
+    except ValueError:
+        count = 0
+
+    reward = count * rate
+
+    payload = {
+        "type": "report",
+        "member": message.author.display_name,
+        "channel": parent_channel,
+        "sub_channel": sub_channel if sub_channel != parent_channel else "",
+        "date": report.get("日付", ""),
+        "count": count,
+        "rate": rate,
+        "reward": reward,
+        "notes": report.get("伝達事項", ""),
+        "other": report.get("その他", ""),
+        "message_url": message.jump_url,
+        "timestamp": message.created_at.isoformat(),
+    }
+    logger.info(
+        "Report from %s in #%s: %d件 × %d円 = %d円",
+        payload["member"], parent_channel, count, rate, reward,
+    )
+    return payload
+
+
+def build_fixed_fee_payload(parent_channel: str, sub_channel: str, message: discord.Message) -> dict | None:
+    """エアコン案件など：固定月額のため単価計算はせず、報告のみ記録する。
+    monthly_fee はメッセージ件数に関わらず常に同じ固定値（月次集計はスプレッドシート側で行う）。"""
+    if not is_report_message(message.content):
+        return None
+
+    report = parse_report(message.content)
+    if not report:
+        return None
+
+    member = report.get("対応者") or message.author.display_name
+
+    payload = {
+        "type": "fixed_fee",
+        "member": member,
+        "channel": parent_channel,
+        "sub_channel": sub_channel if sub_channel != parent_channel else "",
+        "date": report.get("日付", ""),
+        "monthly_fee": FIXED_FEE_CHANNELS[parent_channel],
+        "notes": report.get("伝達事項", ""),
+        "message_url": message.jump_url,
+        "timestamp": message.created_at.isoformat(),
+    }
+    logger.info(
+        "Fixed-fee report from %s in #%s (月額%d円は固定計上)",
+        member, parent_channel, FIXED_FEE_CHANNELS[parent_channel],
+    )
+    return payload
+
+
+def build_hybrid_payload(parent_channel: str, sub_channel: str, message: discord.Message) -> dict | None:
+    """corder架電・株式会社composure架電など：開始/終了時刻から実働時間を算出し、
+    日額固定＋残業時間割のハイブリッド単価で外注費と売上を計算する。"""
+    if not is_report_message(message.content):
+        return None
+
+    report = parse_report(message.content)
+    if not report:
+        return None
+
+    start_min = parse_time_to_minutes(report.get("開始時刻", ""))
+    end_min = parse_time_to_minutes(report.get("終了時刻", ""))
+    if start_min is None or end_min is None or end_min <= start_min:
+        logger.warning("Invalid start/end time in #%s: %r", parent_channel, message.content)
+        return None
+
+    worked_hours = (end_min - start_min) / 60
+    cfg = HYBRID_RATE_CHANNELS[parent_channel]
+    normal_cost, overtime_cost = calc_hybrid_cost(worked_hours, cfg)
+    reward = normal_cost + overtime_cost
+    revenue = round(worked_hours * cfg["revenue_rate"])
+
+    member = report.get("対応者") or message.author.display_name
+
+    payload = {
+        "type": "hybrid_report",
+        "member": member,
+        "channel": parent_channel,
+        "sub_channel": sub_channel if sub_channel != parent_channel else "",
+        "project": report.get("案件", parent_channel),
+        "date": report.get("日付", ""),
+        "start_time": report.get("開始時刻", ""),
+        "end_time": report.get("終了時刻", ""),
+        "worked_hours": round(worked_hours, 2),
+        "normal_cost": normal_cost,
+        "overtime_cost": overtime_cost,
+        "reward": reward,
+        "revenue": revenue,
+        "notes": report.get("伝達事項", ""),
+        "message_url": message.jump_url,
+        "timestamp": message.created_at.isoformat(),
+    }
+    logger.info(
+        "Hybrid report from %s in #%s: %.2fh (通常=%d円, 残業=%d円, 合計=%d円, 売上=%d円)",
+        member, parent_channel, worked_hours, normal_cost, overtime_cost, reward, revenue,
+    )
+    return payload
+
+
 @client.event
 async def on_message(message: discord.Message):
     if message.author.bot:
@@ -151,61 +337,18 @@ async def on_message(message: discord.Message):
     if parent_channel is None:
         return
 
-    rate = resolve_rate(parent_channel, message.author.display_name)
-    is_attendance = rate is None  # 出勤報告部屋など報酬計算対象外
-
-    if is_attendance:
-        # 勤怠管理：ログイン時刻を記録
-        login_time = parse_login_time(message.content)
-        if login_time is None:
-            return
-
-        payload = {
-            "type": "attendance",
-            "member": message.author.display_name,
-            "channel": parent_channel,
-            "sub_channel": sub_channel if sub_channel != parent_channel else "",
-            "login_time": login_time,
-            "message_url": message.jump_url,
-            "timestamp": message.created_at.isoformat(),
-        }
-        logger.info("Attendance from %s at %s", payload["member"], login_time)
-
+    if parent_channel in HYBRID_RATE_CHANNELS:
+        payload = build_hybrid_payload(parent_channel, sub_channel, message)
+    elif parent_channel in FIXED_FEE_CHANNELS:
+        payload = build_fixed_fee_payload(parent_channel, sub_channel, message)
+    elif CHANNEL_RATES[parent_channel] is None:
+        payload = build_attendance_payload(parent_channel, sub_channel, message)
     else:
-        # 件数報告：報酬計算
-        if not is_report_message(message.content):
-            return
+        rate = resolve_rate(parent_channel, message.author.display_name)
+        payload = build_report_payload(parent_channel, sub_channel, message, rate)
 
-        report = parse_report(message.content)
-        if not report:
-            return
-
-        count_str = report.get("件数", "0")
-        try:
-            count = int(re.sub(r"[^\d]", "", count_str))
-        except ValueError:
-            count = 0
-
-        reward = count * rate
-
-        payload = {
-            "type": "report",
-            "member": message.author.display_name,
-            "channel": parent_channel,
-            "sub_channel": sub_channel if sub_channel != parent_channel else "",
-            "date": report.get("日付", ""),
-            "count": count,
-            "rate": rate,
-            "reward": reward,
-            "notes": report.get("伝達事項", ""),
-            "other": report.get("その他", ""),
-            "message_url": message.jump_url,
-            "timestamp": message.created_at.isoformat(),
-        }
-        logger.info(
-            "Report from %s in #%s: %d件 × %d円 = %d円",
-            payload["member"], parent_channel, count, rate, reward,
-        )
+    if payload is None:
+        return
 
     async with aiohttp.ClientSession() as session:
         try:
