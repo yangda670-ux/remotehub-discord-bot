@@ -1,6 +1,8 @@
 import os
 import re
+import math
 import logging
+from datetime import date, datetime
 import aiohttp
 import discord
 
@@ -39,8 +41,8 @@ MEMBER_RATE_OVERRIDES: dict[str, dict[str, int]] = {
 # revenue_rate: 案件側の売上計算用の円/時（外注費とは別に売上をBotから送信する）
 HYBRID_RATE_CHANNELS: dict[str, dict[str, float]] = {
     "corder架電": {
-        "regular_hours": 8,
-        "day_rate": 6000,
+        "regular_hours": 6,
+        "day_rate": 5000,
         "overtime_rate": 1000,
         "revenue_rate": 1500,
     },
@@ -51,6 +53,25 @@ HYBRID_RATE_CHANNELS: dict[str, dict[str, float]] = {
         "revenue_rate": 1300,
     },
 }
+
+# ハイブリッド単価チャンネルの実際のDiscordチャンネル/スレッド名と一致しない場合に備え、
+# メッセージ先頭行の案件ラベル（例:「Composure」「CORDER」）からも判定できるようにする
+PROJECT_LABEL_ALIASES: dict[str, str] = {
+    "composure": "株式会社composure架電",
+    "corder": "corder架電",
+}
+
+
+def detect_project_from_content(content: str) -> str | None:
+    for line in content.splitlines():
+        label = line.strip().lower()
+        if not label:
+            continue
+        for alias, channel_name in PROJECT_LABEL_ALIASES.items():
+            if label.startswith(alias):
+                return channel_name
+        break  # 先頭の非空行のみ見る
+    return None
 
 # 固定月額報酬のため単価計算をしないチャンネル（報告は記録するのみ）
 FIXED_FEE_CHANNELS: dict[str, int] = {
@@ -71,6 +92,9 @@ LOGIN_PATTERNS = [
 
 # 「9:00」「09時00分」などの時刻表記から分数（0時からの経過分）を読み取る
 TIME_PATTERN = re.compile(r"(\d{1,2})\s*[:：時]\s*(\d{1,2})?\s*分?")
+
+# 「7/30」「2026/7/30」のような年省略可のスラッシュ区切り日付
+DATE_PATTERN = re.compile(r"(?:(\d{4})[/／])?(\d{1,2})[/／](\d{1,2})")
 
 
 def parse_report(content: str) -> dict:
@@ -112,13 +136,26 @@ def parse_login_time(content: str) -> str | None:
 
 
 def parse_time_to_minutes(text: str) -> int | None:
-    """「9:00」「09時00分」等の時刻表記を0時からの経過分に変換する。"""
+    """「9:00」「09時00分」等の時刻表記を0時からの経過分に変換する（全角コロン「：」も対応）。"""
     m = TIME_PATTERN.search(text.strip())
     if not m:
         return None
     hour = int(m.group(1))
     minute = int(m.group(2)) if m.group(2) else 0
     return hour * 60 + minute
+
+
+def normalize_date(text: str) -> str:
+    """「7/30」のような年省略形式を当年のISO日付に正規化する。パースできなければ元の文字列を返す。"""
+    m = DATE_PATTERN.search(text.strip())
+    if not m:
+        return text.strip()
+    year = int(m.group(1)) if m.group(1) else datetime.now().year
+    month, day = int(m.group(2)), int(m.group(3))
+    try:
+        return date(year, month, day).isoformat()
+    except ValueError:
+        return text.strip()
 
 
 # 対象チャンネル名の集合（CHANNEL_RATES / HYBRID_RATE_CHANNELS / FIXED_FEE_CHANNELS のいずれか）
@@ -160,15 +197,17 @@ def resolve_rate(channel_name: str, member_name: str) -> int | None:
 
 
 def calc_hybrid_cost(worked_hours: float, cfg: dict) -> tuple[int, int]:
-    """(通常分の外注費, 残業分の外注費) を返す。
-    規定時間ちょうどで日額固定と一致するよう、通常時間単価は「日額 ÷ 規定時間」の小数値で計算し、
-    最後に円単位で丸める。"""
+    """(通常分の外注費, 残業分の外注費) を返す。円未満は切り捨て。
+    実働時間が規定時間以上 → 日額固定＋超過分×残業単価
+    実働時間が規定時間未満 → 実働時間×時間割単価（日額÷規定時間、円未満切り捨て）"""
     regular_hours = cfg["regular_hours"]
-    if worked_hours <= regular_hours:
-        normal_cost = round(cfg["day_rate"] / regular_hours * worked_hours)
-        return normal_cost, 0
-    overtime_cost = round((worked_hours - regular_hours) * cfg["overtime_rate"])
-    return int(cfg["day_rate"]), overtime_cost
+    day_rate = int(cfg["day_rate"])
+    if worked_hours >= regular_hours:
+        overtime_cost = math.floor((worked_hours - regular_hours) * cfg["overtime_rate"])
+        return day_rate, overtime_cost
+    hourly_rate = math.floor(day_rate / regular_hours)
+    normal_cost = math.floor(worked_hours * hourly_rate)
+    return normal_cost, 0
 
 
 async def post_to_gas(session: aiohttp.ClientSession, payload: dict) -> int:
@@ -279,27 +318,29 @@ def build_fixed_fee_payload(parent_channel: str, sub_channel: str, message: disc
     return payload
 
 
-def build_hybrid_payload(parent_channel: str, sub_channel: str, message: discord.Message) -> dict | None:
+def build_hybrid_payload(parent_channel: str, sub_channel: str, message: discord.Message) -> tuple[dict | None, str | None]:
     """corder架電・株式会社composure架電など：開始/終了時刻から実働時間を算出し、
-    日額固定＋残業時間割のハイブリッド単価で外注費と売上を計算する。"""
+    日額固定＋残業時間割のハイブリッド単価で外注費と売上を計算する。
+    戻り値は (payload, warning)。報告として認識できなければ (None, None)、
+    報告らしいが時刻が読み取れない場合は (None, 警告文) を返す。"""
     if not is_report_message(message.content):
-        return None
+        return None, None
 
     report = parse_report(message.content)
     if not report:
-        return None
+        return None, None
 
     start_min = parse_time_to_minutes(report.get("開始時刻", ""))
     end_min = parse_time_to_minutes(report.get("終了時刻", ""))
     if start_min is None or end_min is None or end_min <= start_min:
         logger.warning("Invalid start/end time in #%s: %r", parent_channel, message.content)
-        return None
+        return None, "⚠開始時刻・終了時刻の形式をご確認ください（例：9:00〜18:00）"
 
     worked_hours = (end_min - start_min) / 60
     cfg = HYBRID_RATE_CHANNELS[parent_channel]
     normal_cost, overtime_cost = calc_hybrid_cost(worked_hours, cfg)
     reward = normal_cost + overtime_cost
-    revenue = round(worked_hours * cfg["revenue_rate"])
+    revenue = math.floor(worked_hours * cfg["revenue_rate"])
 
     member = report.get("対応者") or message.author.display_name
 
@@ -309,7 +350,7 @@ def build_hybrid_payload(parent_channel: str, sub_channel: str, message: discord
         "channel": parent_channel,
         "sub_channel": sub_channel if sub_channel != parent_channel else "",
         "project": report.get("案件", parent_channel),
-        "date": report.get("日付", ""),
+        "date": normalize_date(report.get("日付", "")),
         "start_time": report.get("開始時刻", ""),
         "end_time": report.get("終了時刻", ""),
         "worked_hours": round(worked_hours, 2),
@@ -325,7 +366,7 @@ def build_hybrid_payload(parent_channel: str, sub_channel: str, message: discord
         "Hybrid report from %s in #%s: %.2fh (通常=%d円, 残業=%d円, 合計=%d円, 売上=%d円)",
         member, parent_channel, worked_hours, normal_cost, overtime_cost, reward, revenue,
     )
-    return payload
+    return payload, None
 
 
 @client.event
@@ -334,11 +375,20 @@ async def on_message(message: discord.Message):
         return
 
     parent_channel, sub_channel = resolve_channel(message.channel)
+
+    # チャンネル/スレッド名で判定できない場合、メッセージ先頭行の案件ラベル
+    # （「Composure」「CORDER」等）からハイブリッド単価チャンネルへのフォールバック判定を試みる
+    if parent_channel is None:
+        fallback_channel = detect_project_from_content(message.content)
+        if fallback_channel is not None:
+            parent_channel, sub_channel = fallback_channel, message.channel.name
+
     if parent_channel is None:
         return
 
+    warning = None
     if parent_channel in HYBRID_RATE_CHANNELS:
-        payload = build_hybrid_payload(parent_channel, sub_channel, message)
+        payload, warning = build_hybrid_payload(parent_channel, sub_channel, message)
     elif parent_channel in FIXED_FEE_CHANNELS:
         payload = build_fixed_fee_payload(parent_channel, sub_channel, message)
     elif CHANNEL_RATES[parent_channel] is None:
@@ -348,6 +398,8 @@ async def on_message(message: discord.Message):
         payload = build_report_payload(parent_channel, sub_channel, message, rate)
 
     if payload is None:
+        if warning:
+            await message.reply(warning)
         return
 
     async with aiohttp.ClientSession() as session:
