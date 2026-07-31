@@ -46,7 +46,7 @@ HYBRID_RATE_CHANNELS: dict[str, dict[str, float]] = {
         "overtime_rate": 1000,
         "revenue_rate": 1500,
     },
-    "株式会社composure架電": {
+    "株式会社Composure架電": {
         "regular_hours": 9,
         "day_rate": 6500,
         "overtime_rate": 1000,
@@ -57,7 +57,7 @@ HYBRID_RATE_CHANNELS: dict[str, dict[str, float]] = {
 # ハイブリッド単価チャンネルの実際のDiscordチャンネル/スレッド名と一致しない場合に備え、
 # メッセージ先頭行の案件ラベル（例:「Composure」「CORDER」）からも判定できるようにする
 PROJECT_LABEL_ALIASES: dict[str, str] = {
-    "composure": "株式会社composure架電",
+    "composure": "株式会社Composure架電",
     "corder": "corder架電",
 }
 
@@ -319,7 +319,7 @@ def build_fixed_fee_payload(parent_channel: str, sub_channel: str, message: disc
 
 
 def build_hybrid_payload(parent_channel: str, sub_channel: str, message: discord.Message) -> tuple[dict | None, str | None]:
-    """corder架電・株式会社composure架電など：開始/終了時刻から実働時間を算出し、
+    """corder架電・株式会社Composure架電など：開始/終了時刻から実働時間を算出し、
     日額固定＋残業時間割のハイブリッド単価で外注費と売上を計算する。
     戻り値は (payload, warning)。報告として認識できなければ (None, None)、
     報告らしいが時刻が読み取れない場合は (None, 警告文) を返す。"""
