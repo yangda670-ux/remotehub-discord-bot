@@ -123,7 +123,7 @@ FIXED_FEE_CHANNELS: dict[str, int] = {
 }
 
 # 上記チャンネル配下で報告を拾う子チャンネル名（スレッド・カテゴリ内チャンネル）
-REPORT_CHILD_KEYWORDS = {"報告スペース", "報告", "件数報告", "報告チャンネル"}
+REPORT_CHILD_KEYWORDS = {"報告スペース", "報告", "件数報告", "報告チャンネル", "報告スレッド"}
 
 REPORT_FIELDS = ["日付", "件数", "伝達事項", "その他", "案件", "対応者", "開始時刻", "終了時刻"]
 
@@ -240,14 +240,21 @@ def resolve_rate(channel_name: str, member_name: str) -> int | None:
     return CHANNEL_RATES[channel_name]
 
 
+OVERTIME_GRACE_MINUTES = 5  # 規定時間超過がこの分数未満なら誤差として切り捨て、残業扱いにしない
+
+
 def calc_hybrid_cost(worked_hours: float, cfg: dict) -> tuple[int, int]:
     """(通常分の外注費, 残業分の外注費) を返す。円未満は切り捨て。
     実働時間が規定時間以上 → 日額固定＋超過分×残業単価
+    （超過が OVERTIME_GRACE_MINUTES 分未満の場合は誤差として切り捨て、規定時間ちょうど扱い）
     実働時間が規定時間未満 → 実働時間×時間割単価（日額÷規定時間、円未満切り捨て）"""
     regular_hours = cfg["regular_hours"]
     day_rate = int(cfg["day_rate"])
     if worked_hours >= regular_hours:
-        overtime_cost = math.floor((worked_hours - regular_hours) * cfg["overtime_rate"])
+        excess_hours = worked_hours - regular_hours
+        if excess_hours * 60 < OVERTIME_GRACE_MINUTES:
+            return day_rate, 0
+        overtime_cost = math.floor(excess_hours * cfg["overtime_rate"])
         return day_rate, overtime_cost
     hourly_rate = math.floor(day_rate / regular_hours)
     normal_cost = math.floor(worked_hours * hourly_rate)
