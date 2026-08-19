@@ -2,6 +2,11 @@
 const SALES_SUMMARY_SPREADSHEET_ID = "1rL8R3WOPBSJ2WRgziUS2lbLinAs4n0hhCOEc3YEoYvY";
 const SALES_SUMMARY_SHEET_NAME = "完了件数集計";
 
+// 報告・勤怠の記録先は必ずシート名で指定する（getActiveSheet()にフォールバックしない）。
+// 「シート1」は過去に複製された重複シートのため使用しない。
+const REPORT_SHEET_NAME = "報酬計算";
+const ATTENDANCE_SHEET_NAME = "勤怠";
+
 function doGet(e) {
   const p = e.parameter;
 
@@ -17,16 +22,18 @@ function doGet(e) {
   }
 
   if (type === "attendance") {
-    recordAttendance({
+    if (!recordAttendance({
       member,
       channel,
       subChannel,
       loginTime: p.login_time || "",
       timestamp,
       messageUrl,
-    });
+    })) {
+      return ContentService.createTextOutput("error: sheet not found: " + ATTENDANCE_SHEET_NAME);
+    }
   } else if (type === "report") {
-    recordReport({
+    if (!recordReport({
       member,
       channel,
       subChannel,
@@ -38,7 +45,9 @@ function doGet(e) {
       other:  p.other  || "",
       timestamp,
       messageUrl,
-    });
+    })) {
+      return ContentService.createTextOutput("error: sheet not found: " + REPORT_SHEET_NAME);
+    }
   } else if (type === "hybrid_report") {
     // CORDER・Composure架電など：日額固定＋残業時間割のハイブリッド単価。
     // 単一の単価に落とし込めないため単価欄は空にし、内訳を伝達事項に記載する。
@@ -51,7 +60,7 @@ function doGet(e) {
     const revenue      = Number(p.revenue       || 0);
     const breakdown = `実働${workedHours}h（通常${normalCost}円＋残業${overtimeCost}円＝${reward}円）`;
 
-    recordReport({
+    if (!recordReport({
       member,
       channel,
       subChannel,
@@ -63,7 +72,9 @@ function doGet(e) {
       other:  `売上${revenue}円`,
       timestamp,
       messageUrl,
-    });
+    })) {
+      return ContentService.createTextOutput("error: sheet not found: " + REPORT_SHEET_NAME);
+    }
   } else {
     return ContentService.createTextOutput("unknown type: " + type);
   }
@@ -119,7 +130,11 @@ function jsonOutput(obj) {
 
 function recordReport(d) {
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("報告") || ss.getActiveSheet();
+  const sheet = ss.getSheetByName(REPORT_SHEET_NAME);
+  if (!sheet) {
+    Logger.log("recordReport: sheet not found: " + REPORT_SHEET_NAME);
+    return false;
+  }
 
   // ヘッダーがなければ1行目に追加
   if (sheet.getLastRow() === 0) {
@@ -142,11 +157,16 @@ function recordReport(d) {
     d.other,
     d.messageUrl,
   ]);
+  return true;
 }
 
 function recordAttendance(d) {
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("勤怠") || ss.getActiveSheet();
+  const sheet = ss.getSheetByName(ATTENDANCE_SHEET_NAME);
+  if (!sheet) {
+    Logger.log("recordAttendance: sheet not found: " + ATTENDANCE_SHEET_NAME);
+    return false;
+  }
 
   // ヘッダーがなければ1行目に追加
   if (sheet.getLastRow() === 0) {
@@ -162,4 +182,5 @@ function recordAttendance(d) {
     d.loginTime,
     d.messageUrl,
   ]);
+  return true;
 }
