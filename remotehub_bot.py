@@ -2,9 +2,10 @@ import os
 import re
 import math
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta, timezone
 import aiohttp
 import discord
+from discord.ext import tasks
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -14,6 +15,49 @@ GAS_URL = os.environ.get(
     "GAS_URL",
     "https://script.google.com/macros/s/AKfycbxDM-TKpvY8VWG8DGuAdqZVKsogAU56mehr6XBVEMM4EKUj4ksrDyQpjl6E9yMXjWY75A/exec",
 )
+
+# 営業進捗報告テンプレートの投稿先チャンネル。
+# SALES_REPORT_CHANNEL_ID（チャンネルID）を優先し、未設定なら SALES_REPORT_CHANNEL_NAME の名前で検索する。
+SALES_REPORT_CHANNEL_ID = os.environ.get("SALES_REPORT_CHANNEL_ID")
+SALES_REPORT_CHANNEL_NAME = os.environ.get("SALES_REPORT_CHANNEL_NAME", "営業")
+
+JST = timezone(timedelta(hours=9))
+
+# 投稿曜日：火曜(1)・木曜(3)。Python の weekday() は月曜=0始まり。
+SALES_REPORT_WEEKDAYS = {1, 3}
+
+# 毎日 UTC 00:00 = JST 09:00 にタスクを起動し、曜日判定は post_sales_report_template 内で行う。
+SALES_REPORT_POST_TIME_UTC = time(hour=0, minute=0, tzinfo=timezone.utc)
+
+SALES_REPORT_TEMPLATE = """【営業進捗報告】
+
+■ 営業活動数
+・DM送付：
+・フォーム送信：
+・メール送信：
+・その他：
+
+■ 反応状況
+・返信件数：
+・商談化件数：
+・紹介見込み：
+・成約見込み：
+
+■ 主な反応内容
+・
+・
+・
+
+■ 課題・気づき
+・
+・
+
+■ 次回までの予定
+・
+・
+
+■ その他共有事項
+・"""
 
 # チャンネル名 → 単価（円/件）。None は報酬計算対象外（勤怠管理のみ）
 CHANNEL_RATES: dict[str, int | None] = {
@@ -226,9 +270,50 @@ intents.members = True
 client = discord.Client(intents=intents)
 
 
+async def resolve_sales_report_channel() -> discord.abc.Messageable | None:
+    """SALES_REPORT_CHANNEL_ID（優先）または SALES_REPORT_CHANNEL_NAME に一致するテキストチャンネルを返す。"""
+    if SALES_REPORT_CHANNEL_ID:
+        channel = client.get_channel(int(SALES_REPORT_CHANNEL_ID))
+        if channel is not None:
+            return channel
+        logger.error("SALES_REPORT_CHANNEL_ID=%s のチャンネルが見つかりません", SALES_REPORT_CHANNEL_ID)
+
+    for guild in client.guilds:
+        for channel in guild.text_channels:
+            if channel.name == SALES_REPORT_CHANNEL_NAME:
+                return channel
+    return None
+
+
+@tasks.loop(time=SALES_REPORT_POST_TIME_UTC)
+async def post_sales_report_template():
+    """毎週火曜・木曜の朝9:00頃（JST）に営業進捗報告テンプレートを自動投稿する。"""
+    now_jst = datetime.now(JST)
+    if now_jst.weekday() not in SALES_REPORT_WEEKDAYS:
+        return
+
+    channel = await resolve_sales_report_channel()
+    if channel is None:
+        logger.error(
+            "営業進捗報告の投稿先チャンネルが見つかりません（SALES_REPORT_CHANNEL_ID または name=%s）",
+            SALES_REPORT_CHANNEL_NAME,
+        )
+        return
+
+    await channel.send(SALES_REPORT_TEMPLATE)
+    logger.info("Posted sales report template to #%s", channel.name)
+
+
+@post_sales_report_template.before_loop
+async def before_post_sales_report_template():
+    await client.wait_until_ready()
+
+
 @client.event
 async def on_ready():
     logger.info("Bot ready: %s (ID: %s)", client.user, client.user.id)
+    if not post_sales_report_template.is_running():
+        post_sales_report_template.start()
 
 
 def build_attendance_payload(parent_channel: str, sub_channel: str, message: discord.Message) -> dict | None:
