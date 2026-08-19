@@ -122,8 +122,10 @@ FIXED_FEE_CHANNELS: dict[str, int] = {
     "エアコン案件": 30000,
 }
 
-# 上記チャンネル配下で報告を拾う子チャンネル名（スレッド・カテゴリ内チャンネル）
-REPORT_CHILD_KEYWORDS = {"報告スペース", "報告", "件数報告", "報告チャンネル", "報告スレッド"}
+# 上記チャンネル配下で報告を拾う子チャンネル（スレッド・カテゴリ内チャンネル）の判定キーワード。
+# 運用側で「報告スレッド」→「報告チャンネル」のように名称変更されても追従できるよう、
+# 完全一致ではなく「報告」を含むかどうかで判定する。
+REPORT_CHILD_NAME_HINT = "報告"
 
 REPORT_FIELDS = ["日付", "件数", "伝達事項", "その他", "案件", "対応者", "開始時刻", "終了時刻"]
 
@@ -217,13 +219,13 @@ def resolve_channel(channel) -> tuple[str | None, str]:
         parent_name = channel.category.name if hasattr(channel, "category") and channel.category else ""
         return name, parent_name
 
-    # スレッドの場合：スレッド名が子チャンネルキーワードで、親が対象チャンネル
+    # スレッドの場合：スレッド名に「報告」を含み、親が対象チャンネル
     if isinstance(channel, discord.Thread):
-        if name in REPORT_CHILD_KEYWORDS and channel.parent and channel.parent.name in ALL_TRACKED_CHANNELS:
+        if REPORT_CHILD_NAME_HINT in name and channel.parent and channel.parent.name in ALL_TRACKED_CHANNELS:
             return channel.parent.name, name
 
-    # カテゴリ内チャンネルの場合
-    if name in REPORT_CHILD_KEYWORDS:
+    # カテゴリ内チャンネルの場合：チャンネル名に「報告」を含み、カテゴリが対象チャンネル
+    if REPORT_CHILD_NAME_HINT in name:
         category = getattr(channel, "category", None)
         if category and category.name in ALL_TRACKED_CHANNELS:
             return category.name, name
@@ -503,6 +505,16 @@ async def on_message(message: discord.Message):
         fallback_channel = detect_project_from_content(message.content)
         if fallback_channel is not None:
             parent_channel, sub_channel = fallback_channel, message.channel.name
+
+    # TEMP DEBUG: Composure報告が拾われない原因調査用。原因判明後に削除する。
+    logger.info(
+        "DEBUG channel_resolve: channel=%r type=%s parent=%r category=%r -> resolved_parent=%r",
+        message.channel.name,
+        type(message.channel).__name__,
+        getattr(getattr(message.channel, "parent", None), "name", None),
+        getattr(getattr(message.channel, "category", None), "name", None),
+        parent_channel,
+    )
 
     if parent_channel is None:
         return
