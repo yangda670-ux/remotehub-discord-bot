@@ -34,6 +34,7 @@ SALES_REPORT_TEMPLATE = """【営業進捗報告】
 ■ 営業活動数
 ・DM送付：
 ・フォーム送信：{form_line}
+・エラー・未送信件数：{error_line}
 ・メール送信：
 ・その他：
 
@@ -272,8 +273,9 @@ async def post_to_gas(session: aiohttp.ClientSession, payload: dict) -> int:
         return resp.status
 
 
-async def fetch_sales_form_summary() -> tuple[int, int] | None:
-    """「完了件数集計」シートの合計リスト作成件数・フォーム送信件数を GAS 経由で取得する。
+async def fetch_sales_form_summary() -> tuple[int, int, int] | None:
+    """「完了件数集計」シートの合計リスト作成件数・フォーム送信件数、
+    「営業リスト・送信管理」シートのエラー・未送信件数を GAS 経由で取得する。
     取得できない場合は None を返す（呼び出し側は空欄のまま投稿する）。"""
     timeout = aiohttp.ClientTimeout(total=15)
     try:
@@ -291,7 +293,11 @@ async def fetch_sales_form_summary() -> tuple[int, int] | None:
         logger.error("sales_summary error: %s", data["error"])
         return None
 
-    return int(data.get("list_count", 0)), int(data.get("form_count", 0))
+    return (
+        int(data.get("list_count", 0)),
+        int(data.get("form_count", 0)),
+        int(data.get("error_unsent_count", 0)),
+    )
 
 
 intents = discord.Intents.default()
@@ -333,12 +339,14 @@ async def post_sales_report_template():
 
     summary = await fetch_sales_form_summary()
     if summary is not None:
-        list_count, form_count = summary
+        list_count, form_count, error_unsent_count = summary
         form_line = f"フォーム送信{form_count}件／リスト作成{list_count}件"
+        error_line = f"{error_unsent_count}件"
     else:
         form_line = ""
+        error_line = ""
 
-    await channel.send(SALES_REPORT_TEMPLATE.format(form_line=form_line))
+    await channel.send(SALES_REPORT_TEMPLATE.format(form_line=form_line, error_line=error_line))
     logger.info("Posted sales report template to #%s", channel.name)
 
 

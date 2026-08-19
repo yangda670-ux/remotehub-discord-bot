@@ -1,6 +1,8 @@
-// 営業進捗報告テンプレートの「フォーム送信：」項目に自動集計値を埋め込むための参照先
+// 営業進捗報告テンプレートの自動集計項目の参照先
 const SALES_SUMMARY_SPREADSHEET_ID = "1rL8R3WOPBSJ2WRgziUS2lbLinAs4n0hhCOEc3YEoYvY";
-const SALES_SUMMARY_SHEET_NAME = "完了件数集計";
+const SALES_SUMMARY_SHEET_NAME = "完了件数集計"; // 「フォーム送信：」用
+const SALES_LIST_SHEET_NAME = "営業リスト・送信管理"; // 「エラー・未送信件数：」用
+const SALES_LIST_ERROR_STATUSES = new Set(["エラー", "未送信", ""]); // 空欄（未入力）も未対応として扱う
 
 // 報告・勤怠の記録先は必ずシート名で指定する（getActiveSheet()にフォールバックしない）。
 // 正式な記録先は「シート1」（Discordメッセージへのリンク付きで情報量が多いため採用）。
@@ -109,7 +111,7 @@ function getSalesSummary() {
   }
 
   if (headerRow === -1) {
-    return jsonOutput({ error: "header row not found" });
+    return jsonOutput({ error: "header row not found in " + SALES_SUMMARY_SHEET_NAME });
   }
 
   let listTotal = 0;
@@ -121,7 +123,45 @@ function getSalesSummary() {
     formTotal += Number(values[r][colForm]) || 0;
   }
 
-  return jsonOutput({ list_count: listTotal, form_count: formTotal });
+  const errorUnsentCount = countSalesListErrorsUnsent(ss);
+  if (errorUnsentCount === null) {
+    return jsonOutput({ error: "sheet not found: " + SALES_LIST_SHEET_NAME });
+  }
+
+  return jsonOutput({ list_count: listTotal, form_count: formTotal, error_unsent_count: errorUnsentCount });
+}
+
+function countSalesListErrorsUnsent(ss) {
+  const sheet = ss.getSheetByName(SALES_LIST_SHEET_NAME);
+  if (!sheet) return null;
+
+  const values = sheet.getDataRange().getValues();
+
+  // 「企業名 / ... / 送信ステータス」のヘッダー行を探す（位置固定にしない）
+  let headerRow = -1;
+  let colCompany = -1;
+  let colStatus = -1;
+  for (let r = 0; r < values.length; r++) {
+    const row = values[r];
+    const idxCompany = row.indexOf("企業名");
+    const idxStatus = row.indexOf("送信ステータス");
+    if (idxCompany !== -1 && idxStatus !== -1) {
+      headerRow = r;
+      colCompany = idxCompany;
+      colStatus = idxStatus;
+      break;
+    }
+  }
+  if (headerRow === -1) return null;
+
+  let count = 0;
+  for (let r = headerRow + 1; r < values.length; r++) {
+    const company = values[r][colCompany];
+    if (!company) continue; // 企業名が空の行はデータなしとしてスキップ
+    const status = String(values[r][colStatus] || "").trim();
+    if (SALES_LIST_ERROR_STATUSES.has(status)) count++;
+  }
+  return count;
 }
 
 function jsonOutput(obj) {
