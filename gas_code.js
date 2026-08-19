@@ -40,20 +40,27 @@ function doGet(e) {
       messageUrl,
     });
   } else if (type === "hybrid_report") {
-    recordHybridReport({
+    // CORDER・Composure架電など：日額固定＋残業時間割のハイブリッド単価。
+    // 単一の単価に落とし込めないため単価欄は空にし、内訳を伝達事項に記載する。
+    // 既存の「報告」シートにそのまま記録し、報酬計算・メンバー別集計への反映は
+    // 既存の仕組み（既存シートを参照する集計）に委ねる。新しいシートは作らない。
+    const workedHours  = Number(p.worked_hours  || 0);
+    const normalCost   = Number(p.normal_cost   || 0);
+    const overtimeCost = Number(p.overtime_cost || 0);
+    const reward       = Number(p.reward        || 0);
+    const revenue      = Number(p.revenue       || 0);
+    const breakdown = `実働${workedHours}h（通常${normalCost}円＋残業${overtimeCost}円＝${reward}円）`;
+
+    recordReport({
       member,
       channel,
       subChannel,
-      project:      p.project       || "",
-      date:         p.date          || "",
-      startTime:    p.start_time    || "",
-      endTime:      p.end_time      || "",
-      workedHours:  Number(p.worked_hours  || 0),
-      normalCost:   Number(p.normal_cost   || 0),
-      overtimeCost: Number(p.overtime_cost || 0),
-      reward:       Number(p.reward        || 0),
-      revenue:      Number(p.revenue       || 0),
-      notes:        p.notes         || "",
+      date:   p.date || "",
+      count:  workedHours,
+      rate:   "",
+      reward,
+      notes:  p.notes ? `${p.notes}\n${breakdown}` : breakdown,
+      other:  `売上${revenue}円`,
       timestamp,
       messageUrl,
     });
@@ -133,38 +140,6 @@ function recordReport(d) {
     d.reward,
     d.notes,
     d.other,
-    d.messageUrl,
-  ]);
-}
-
-function recordHybridReport(d) {
-  const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("架電報告") || ss.getActiveSheet();
-
-  // ヘッダーがなければ1行目に追加
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow([
-      "タイムスタンプ", "メンバー", "案件", "チャンネル", "サブチャンネル",
-      "日付", "開始時刻", "終了時刻", "実働時間(h)",
-      "通常分外注費", "残業分外注費", "外注費合計", "売上", "伝達事項", "メッセージURL"
-    ]);
-  }
-
-  sheet.appendRow([
-    d.timestamp,
-    d.member,
-    d.project,
-    d.channel,
-    d.subChannel,
-    d.date,
-    d.startTime,
-    d.endTime,
-    d.workedHours,
-    d.normalCost,
-    d.overtimeCost,
-    d.reward,
-    d.revenue,
-    d.notes,
     d.messageUrl,
   ]);
 }
