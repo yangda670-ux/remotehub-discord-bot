@@ -19,7 +19,7 @@ GAS_URL = os.environ.get(
 # 営業進捗報告テンプレートの投稿先チャンネル。
 # SALES_REPORT_CHANNEL_ID（チャンネルID）を優先し、未設定なら SALES_REPORT_CHANNEL_NAME の名前で検索する。
 SALES_REPORT_CHANNEL_ID = os.environ.get("SALES_REPORT_CHANNEL_ID")
-SALES_REPORT_CHANNEL_NAME = os.environ.get("SALES_REPORT_CHANNEL_NAME", "営業")
+SALES_REPORT_CHANNEL_NAME = os.environ.get("SALES_REPORT_CHANNEL_NAME", "改テック")
 
 JST = timezone(timedelta(hours=9))
 
