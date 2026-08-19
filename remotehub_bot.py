@@ -63,8 +63,6 @@ SALES_REPORT_TEMPLATE = """【営業進捗報告】
 # チャンネル名 → 単価（円/件）。None は報酬計算対象外（勤怠管理のみ）
 CHANNEL_RATES: dict[str, int | None] = {
     "五味八珍-cs-🍚": 50,
-    "不動産cs-🏠": 50,
-    "株式会社sou": 100,
     "採用面談-代行🏃‍♀️‍➡️": 300,
     "サロン-公式line返信": 10,
     "営業テレアポチーム": 1100,
@@ -80,6 +78,12 @@ CHANNEL_RATES: dict[str, int | None] = {
 MEMBER_RATE_OVERRIDES: dict[str, dict[str, int]] = {
     "五味八珍-cs-🍚": {"こやま": 60},
     "採用面談-代行🏃‍♀️‍➡️": {"ほの": 500},
+    "ウェブアプリcs": {"清田": 100},  # 清田は外注ではなく自社対応のため、外注費なしの売上として計上
+}
+
+# 外注費を差し引かず、report の reward をそのまま売上として扱うメンバー（チャンネル名 → メンバー名の集合）
+IN_HOUSE_REVENUE_MEMBERS: dict[str, set[str]] = {
+    "ウェブアプリcs": {"清田"},
 }
 
 # 日額固定＋時間割のハイブリッド単価チャンネル（開始・終了時刻から実働時間を計算）
@@ -119,9 +123,20 @@ def detect_project_from_content(content: str) -> str | None:
         break  # 先頭の非空行のみ見る
     return None
 
-# 固定月額報酬のため単価計算をしないチャンネル（報告は記録するのみ）
-FIXED_FEE_CHANNELS: dict[str, int] = {
-    "エアコン案件": 30000,
+# 固定報酬のため単価計算をしないチャンネル（報告は記録するのみ）。
+# group が同じチャンネルは合算で1つの固定報酬として扱う（例：sou・不動産csのセット対応）。
+# group なし（None）は単独チャンネルの固定月額。
+FIXED_FEE_CHANNELS: dict[str, dict] = {
+    "エアコン案件": {"monthly_fee": 30000, "group": None},
+    # sou・不動産csセット：2チャンネル合算件数が閾値に達するまでは件数に関わらず固定5,000円のみ。
+    # 閾値超過時の扱いは未定のため、現状は超過後も固定額のまま運用する。
+    "株式会社sou": {"monthly_fee": 5000, "group": "sou_fudousan_set"},
+    "不動産cs-🏠": {"monthly_fee": 5000, "group": "sou_fudousan_set"},
+}
+
+# 合算グループの閾値（現時点では参考情報のみ。超過時の扱いは未定のため計算には使用しない）
+COMBINED_FEE_GROUP_THRESHOLDS: dict[str, int] = {
+    "sou_fudousan_set": 50,
 }
 
 # 上記チャンネル配下で報告を拾う子チャンネル（スレッド・カテゴリ内チャンネル）の判定キーワード。
@@ -399,9 +414,16 @@ def build_report_payload(parent_channel: str, sub_channel: str, message: discord
 
     reward = count * rate
 
+    member = message.author.display_name
+    other = report.get("その他", "")
+    if member in IN_HOUSE_REVENUE_MEMBERS.get(parent_channel, set()):
+        # 外注ではなく自社対応のため、reward は外注費ではなく売上として計上する
+        note = "外注費0円・売上として計上"
+        other = f"{other}／{note}" if other else note
+
     payload = {
         "type": "report",
-        "member": message.author.display_name,
+        "member": member,
         "channel": parent_channel,
         "sub_channel": sub_channel if sub_channel != parent_channel else "",
         "date": report.get("日付", ""),
@@ -409,7 +431,7 @@ def build_report_payload(parent_channel: str, sub_channel: str, message: discord
         "rate": rate,
         "reward": reward,
         "notes": report.get("伝達事項", ""),
-        "other": report.get("その他", ""),
+        "other": other,
         "message_url": message.jump_url,
         "timestamp": message.created_at.isoformat(),
     }
@@ -421,8 +443,11 @@ def build_report_payload(parent_channel: str, sub_channel: str, message: discord
 
 
 def build_fixed_fee_payload(parent_channel: str, sub_channel: str, message: discord.Message) -> dict | None:
-    """エアコン案件など：固定月額のため単価計算はせず、報告のみ記録する。
-    monthly_fee はメッセージ件数に関わらず常に同じ固定値（月次集計はスプレッドシート側で行う）。"""
+    """エアコン案件・株式会社sou・不動産cs-🏠など：固定報酬のため単価計算はせず、報告のみ記録する。
+    group が設定されているチャンネルは、同じ group の他チャンネルと合算で1つの固定報酬として扱う
+    （例：sou・不動産csセットは合算件数が閾値を超えても、扱いが決まるまでは固定額のまま）。
+    reward は常に0とし、実際の固定額の支払いはスプレッドシート側で別途・月次で行う
+    （件数は合算閾値の判断材料として記録するのみ）。"""
     if not is_report_message(message.content):
         return None
 
@@ -432,20 +457,37 @@ def build_fixed_fee_payload(parent_channel: str, sub_channel: str, message: disc
 
     member = report.get("対応者") or message.author.display_name
 
+    count_str = report.get("件数", "0")
+    try:
+        count = int(re.sub(r"[^\d]", "", count_str))
+    except ValueError:
+        count = 0
+
+    cfg = FIXED_FEE_CHANNELS[parent_channel]
+    group = cfg["group"] or ""
+    fee_note = f"固定{cfg['monthly_fee']}円"
+    if group:
+        threshold = COMBINED_FEE_GROUP_THRESHOLDS.get(group)
+        fee_note += f"（{group}セット・合算閾値{threshold}件、超過時の扱いは未定のため現状固定額のまま）"
+    notes = report.get("伝達事項", "")
+    notes = f"{notes}／{fee_note}" if notes else fee_note
+
     payload = {
         "type": "fixed_fee",
         "member": member,
         "channel": parent_channel,
         "sub_channel": sub_channel if sub_channel != parent_channel else "",
         "date": report.get("日付", ""),
-        "monthly_fee": FIXED_FEE_CHANNELS[parent_channel],
-        "notes": report.get("伝達事項", ""),
+        "count": count,
+        "monthly_fee": cfg["monthly_fee"],
+        "group": group,
+        "notes": notes,
         "message_url": message.jump_url,
         "timestamp": message.created_at.isoformat(),
     }
     logger.info(
-        "Fixed-fee report from %s in #%s (月額%d円は固定計上)",
-        member, parent_channel, FIXED_FEE_CHANNELS[parent_channel],
+        "Fixed-fee report from %s in #%s: %d件（固定%d円%s）",
+        member, parent_channel, count, cfg["monthly_fee"], f"／{group}" if group else "",
     )
     return payload
 

@@ -77,6 +77,24 @@ function doGet(e) {
     })) {
       return ContentService.createTextOutput("error: sheet not found: " + REPORT_SHEET_NAME);
     }
+  } else if (type === "fixed_fee") {
+    // エアコン案件・株式会社sou・不動産cs-🏠など：固定報酬のため単価計算はせず、報告のみ記録する。
+    // reward は常に0（実際の固定額の支払いはスプレッドシート側で別途・月次で行う）。
+    if (!recordReport({
+      member,
+      channel,
+      subChannel,
+      date:   p.date || "",
+      count:  Number(p.count || 0),
+      rate:   "",
+      reward: 0,
+      notes:  p.notes || "",
+      other:  p.group ? `グループ:${p.group}` : "",
+      timestamp,
+      messageUrl,
+    })) {
+      return ContentService.createTextOutput("error: sheet not found: " + REPORT_SHEET_NAME);
+    }
   } else {
     return ContentService.createTextOutput("unknown type: " + type);
   }
