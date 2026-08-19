@@ -506,6 +506,28 @@ async def on_message(message: discord.Message):
         if fallback_channel is not None:
             parent_channel, sub_channel = fallback_channel, message.channel.name
 
+    # TEMP DEBUG: 全角/半角や不可視文字の混入など、文字レベルの不一致を確実に特定するための詳細ログ。
+    # 原因判明後に削除する。
+    if isinstance(message.channel, discord.Thread) and message.channel.parent:
+        p_name = message.channel.parent.name
+        logger.info(
+            "DEBUG parent_name repr=%r len=%d codepoints=%s in_ALL_TRACKED=%s in_HYBRID=%s similar_keys=%r",
+            p_name,
+            len(p_name),
+            [hex(ord(c)) for c in p_name],
+            p_name in ALL_TRACKED_CHANNELS,
+            p_name in HYBRID_RATE_CHANNELS,
+            [k for k in ALL_TRACKED_CHANNELS if "ompos" in k.lower()],
+        )
+    logger.info(
+        "DEBUG channel_resolve: channel=%r type=%s parent=%r category=%r -> resolved_parent=%r",
+        message.channel.name,
+        type(message.channel).__name__,
+        getattr(getattr(message.channel, "parent", None), "name", None),
+        getattr(getattr(message.channel, "category", None), "name", None),
+        parent_channel,
+    )
+
     if parent_channel is None:
         return
 
