@@ -3,8 +3,8 @@ const SALES_SUMMARY_SPREADSHEET_ID = "1rL8R3WOPBSJ2WRgziUS2lbLinAs4n0hhCOEc3YEoY
 const SALES_SUMMARY_SHEET_NAME = "完了件数集計";
 
 // 報告・勤怠の記録先は必ずシート名で指定する（getActiveSheet()にフォールバックしない）。
-// 「シート1」は過去に複製された重複シートのため使用しない。
-const REPORT_SHEET_NAME = "報酬計算";
+// 正式な記録先は「シート1」（Discordメッセージへのリンク付きで情報量が多いため採用）。
+const REPORT_SHEET_NAME = "シート1";
 const ATTENDANCE_SHEET_NAME = "勤怠";
 
 function doGet(e) {
