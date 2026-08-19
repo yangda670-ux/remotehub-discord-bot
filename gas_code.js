@@ -39,6 +39,24 @@ function doGet(e) {
       timestamp,
       messageUrl,
     });
+  } else if (type === "hybrid_report") {
+    recordHybridReport({
+      member,
+      channel,
+      subChannel,
+      project:      p.project       || "",
+      date:         p.date          || "",
+      startTime:    p.start_time    || "",
+      endTime:      p.end_time      || "",
+      workedHours:  Number(p.worked_hours  || 0),
+      normalCost:   Number(p.normal_cost   || 0),
+      overtimeCost: Number(p.overtime_cost || 0),
+      reward:       Number(p.reward        || 0),
+      revenue:      Number(p.revenue       || 0),
+      notes:        p.notes         || "",
+      timestamp,
+      messageUrl,
+    });
   } else {
     return ContentService.createTextOutput("unknown type: " + type);
   }
@@ -115,6 +133,38 @@ function recordReport(d) {
     d.reward,
     d.notes,
     d.other,
+    d.messageUrl,
+  ]);
+}
+
+function recordHybridReport(d) {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("架電報告") || ss.getActiveSheet();
+
+  // ヘッダーがなければ1行目に追加
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow([
+      "タイムスタンプ", "メンバー", "案件", "チャンネル", "サブチャンネル",
+      "日付", "開始時刻", "終了時刻", "実働時間(h)",
+      "通常分外注費", "残業分外注費", "外注費合計", "売上", "伝達事項", "メッセージURL"
+    ]);
+  }
+
+  sheet.appendRow([
+    d.timestamp,
+    d.member,
+    d.project,
+    d.channel,
+    d.subChannel,
+    d.date,
+    d.startTime,
+    d.endTime,
+    d.workedHours,
+    d.normalCost,
+    d.overtimeCost,
+    d.reward,
+    d.revenue,
+    d.notes,
     d.messageUrl,
   ]);
 }
