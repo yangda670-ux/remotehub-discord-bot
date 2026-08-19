@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
 GAS_URL = os.environ.get(
     "GAS_URL",
-    "https://script.google.com/macros/s/AKfycbxDM-TKpvY8VWG8DGuAdqZVKsogAU56mehr6XBVEMM4EKUj4ksrDyQpjl6E9yMXjWY75A/exec",
+    "https://script.google.com/macros/s/AKfycbws0iKGTUlH47ZYQCN2EKmJLTLf7Leuh7UKqFN3p238i6KlTJgkCzJkMbaMj6gv3n2gmg/exec",
 )
 
 # 営業進捗報告テンプレートの投稿先チャンネル。
