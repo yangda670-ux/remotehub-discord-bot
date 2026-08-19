@@ -90,7 +90,7 @@ HYBRID_RATE_CHANNELS: dict[str, dict[str, float]] = {
         "overtime_rate": 1000,
         "revenue_rate": 1500,
     },
-    "株式会社Composure架電": {
+    "株式会社composure架電": {
         "regular_hours": 9,
         "day_rate": 6500,
         "overtime_rate": 1000,
@@ -101,7 +101,7 @@ HYBRID_RATE_CHANNELS: dict[str, dict[str, float]] = {
 # ハイブリッド単価チャンネルの実際のDiscordチャンネル/スレッド名と一致しない場合に備え、
 # メッセージ先頭行の案件ラベル（例:「Composure」「CORDER」）からも判定できるようにする
 PROJECT_LABEL_ALIASES: dict[str, str] = {
-    "composure": "株式会社Composure架電",
+    "composure": "株式会社composure架電",
     "corder": "corder架電",
 }
 
@@ -505,16 +505,6 @@ async def on_message(message: discord.Message):
         fallback_channel = detect_project_from_content(message.content)
         if fallback_channel is not None:
             parent_channel, sub_channel = fallback_channel, message.channel.name
-
-    # TEMP DEBUG: Composure報告が拾われない原因調査用。原因判明後に削除する。
-    logger.info(
-        "DEBUG channel_resolve: channel=%r type=%s parent=%r category=%r -> resolved_parent=%r",
-        message.channel.name,
-        type(message.channel).__name__,
-        getattr(getattr(message.channel, "parent", None), "name", None),
-        getattr(getattr(message.channel, "category", None), "name", None),
-        parent_channel,
-    )
 
     if parent_channel is None:
         return
