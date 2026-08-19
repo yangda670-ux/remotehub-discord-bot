@@ -2,7 +2,10 @@
 const SALES_SUMMARY_SPREADSHEET_ID = "1G1Zo4eBYp77R7gFckV-TZNY5qF-p_ZcMYY6BUK8xKYg";
 const SALES_LIST_SHEET_NAME = "営業リスト・送信管理";
 const SALES_SENT_STATUS = "送信済み";
-const SALES_LIST_ERROR_STATUSES = new Set(["エラー", "未送信", ""]); // 空欄（未入力）も未対応として扱う
+const SALES_REPLY_YES = "あり";
+const SALES_NEGOTIATION_YES = "あり";
+const SALES_DEAL_RESULT = "成約";
+const SALES_GOAL_COUNT = 5000; // 目標件数（コード内固定値）
 
 // 報告・勤怠の記録先は必ずシート名で指定する（getActiveSheet()にフォールバックしない）。
 // 正式な記録先は「シート1」（Discordメッセージへのリンク付きで情報量が多いため採用）。
@@ -111,25 +114,28 @@ function getSalesSummary() {
 
   const values = sheet.getDataRange().getValues();
 
-  // 「企業名 / リスト作成者 / フォーム送信者 / 送信ステータス」のヘッダー行を探す
-  // （位置固定にしない）
+  // 「企業名 / 送信ステータス / 返信 / 商談予定 / 結果」のヘッダー行を探す
+  // （列の追加・並び替えに対応できるよう、位置固定にしない）
   let headerRow = -1;
   let colCompany = -1;
-  let colListCreator = -1;
-  let colFormSender = -1;
   let colStatus = -1;
+  let colReply = -1;
+  let colNegotiation = -1;
+  let colResult = -1;
   for (let r = 0; r < values.length; r++) {
     const row = values[r];
-    const idxCompany = row.indexOf("企業名");
-    const idxList = row.indexOf("リスト作成者");
-    const idxForm = row.indexOf("フォーム送信者");
-    const idxStatus = row.indexOf("送信ステータス");
-    if (idxCompany !== -1 && idxList !== -1 && idxForm !== -1 && idxStatus !== -1) {
+    const idxCompany     = row.indexOf("企業名");
+    const idxStatus      = row.indexOf("送信ステータス");
+    const idxReply       = row.indexOf("返信");
+    const idxNegotiation = row.indexOf("商談予定");
+    const idxResult      = row.indexOf("結果");
+    if (idxCompany !== -1 && idxStatus !== -1 && idxReply !== -1 && idxNegotiation !== -1 && idxResult !== -1) {
       headerRow = r;
       colCompany = idxCompany;
-      colListCreator = idxList;
-      colFormSender = idxForm;
       colStatus = idxStatus;
+      colReply = idxReply;
+      colNegotiation = idxNegotiation;
+      colResult = idxResult;
       break;
     }
   }
@@ -139,21 +145,38 @@ function getSalesSummary() {
   }
 
   let listTotal = 0;
-  let formTotal = 0;
-  let errorUnsentCount = 0;
+  let sentCount = 0;
+  let replyCount = 0;
+  let negotiationCount = 0;
+  let dealCount = 0;
   for (let r = headerRow + 1; r < values.length; r++) {
     const row = values[r];
     const company     = row[colCompany];
-    const listCreator = row[colListCreator];
-    const formSender  = row[colFormSender];
     const status      = String(row[colStatus] || "").trim();
+    const reply       = String(row[colReply] || "").trim();
+    const negotiation = String(row[colNegotiation] || "").trim();
+    const result      = String(row[colResult] || "").trim();
 
-    if (listCreator) listTotal++;                          // リスト作成件数：リスト作成者が入力済みの行数
-    if (formSender && status === SALES_SENT_STATUS) formTotal++; // フォーム送信件数：フォーム送信者が入力済みかつ送信済みの行数
-    if (company && SALES_LIST_ERROR_STATUSES.has(status)) errorUnsentCount++; // エラー・未送信件数
+    if (company) listTotal++;                            // リスト総数：企業名が入力済みの行数
+    if (status === SALES_SENT_STATUS) sentCount++;        // 送信済み件数
+    if (reply === SALES_REPLY_YES) replyCount++;          // 返信件数
+    if (negotiation === SALES_NEGOTIATION_YES) negotiationCount++; // 商談予定件数
+    if (result === SALES_DEAL_RESULT) dealCount++;        // 成約件数
   }
 
-  return jsonOutput({ list_count: listTotal, form_count: formTotal, error_unsent_count: errorUnsentCount });
+  const sentRate = listTotal > 0 ? Math.round((sentCount / listTotal) * 1000) / 10 : 0;
+  const goalRate = Math.round((sentCount / SALES_GOAL_COUNT) * 1000) / 10;
+
+  return jsonOutput({
+    list_total: listTotal,
+    sent_count: sentCount,
+    sent_rate: sentRate,
+    reply_count: replyCount,
+    negotiation_count: negotiationCount,
+    deal_count: dealCount,
+    goal_count: SALES_GOAL_COUNT,
+    goal_rate: goalRate,
+  });
 }
 
 function jsonOutput(obj) {

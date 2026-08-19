@@ -34,15 +34,15 @@ SALES_REPORT_TEMPLATE = """【営業進捗報告】
 ■ 営業活動数
 ・DM送付：
 ・フォーム送信：{form_line}
-・エラー・未送信件数：{error_line}
 ・メール送信：
 ・その他：
 
 ■ 反応状況
-・返信件数：
-・商談化件数：
+・返信件数：{reply_line}
+・商談化件数：{negotiation_line}
 ・紹介見込み：
-・成約見込み：
+・成約見込み：{deal_line}
+・目標達成率：{goal_rate_line}
 
 ■ 主な反応内容
 ・
@@ -289,9 +289,9 @@ async def post_to_gas(session: aiohttp.ClientSession, payload: dict) -> int:
         return resp.status
 
 
-async def fetch_sales_form_summary() -> tuple[int, int, int] | None:
-    """「完了件数集計」シートの合計リスト作成件数・フォーム送信件数、
-    「営業リスト・送信管理」シートのエラー・未送信件数を GAS 経由で取得する。
+async def fetch_sales_summary() -> dict | None:
+    """「営業リスト・送信管理」シートの集計値（リスト総数・送信済み件数・送信率・
+    返信件数・商談予定件数・成約件数・目標達成率など）を GAS 経由で取得する。
     取得できない場合は None を返す（呼び出し側は空欄のまま投稿する）。"""
     timeout = aiohttp.ClientTimeout(total=15)
     try:
@@ -309,11 +309,7 @@ async def fetch_sales_form_summary() -> tuple[int, int, int] | None:
         logger.error("sales_summary error: %s", data["error"])
         return None
 
-    return (
-        int(data.get("list_count", 0)),
-        int(data.get("form_count", 0)),
-        int(data.get("error_unsent_count", 0)),
-    )
+    return data
 
 
 intents = discord.Intents.default()
@@ -353,16 +349,36 @@ async def post_sales_report_template():
         )
         return
 
-    summary = await fetch_sales_form_summary()
+    summary = await fetch_sales_summary()
     if summary is not None:
-        list_count, form_count, error_unsent_count = summary
-        form_line = f"フォーム送信{form_count}件／リスト作成{list_count}件"
-        error_line = f"{error_unsent_count}件"
+        list_total = int(summary.get("list_total", 0))
+        sent_count = int(summary.get("sent_count", 0))
+        sent_rate = summary.get("sent_rate", 0)
+        reply_count = int(summary.get("reply_count", 0))
+        negotiation_count = int(summary.get("negotiation_count", 0))
+        deal_count = int(summary.get("deal_count", 0))
+        goal_count = int(summary.get("goal_count", 0))
+        goal_rate = summary.get("goal_rate", 0)
+
+        form_line = f"送信済み{sent_count}件／リスト{list_total}件（送信率{sent_rate}%）"
+        reply_line = f"{reply_count}件"
+        negotiation_line = f"{negotiation_count}件"
+        deal_line = f"{deal_count}件"
+        goal_rate_line = f"{goal_rate}%（目標{goal_count}件に対して）"
     else:
         form_line = ""
-        error_line = ""
+        reply_line = ""
+        negotiation_line = ""
+        deal_line = ""
+        goal_rate_line = ""
 
-    await channel.send(SALES_REPORT_TEMPLATE.format(form_line=form_line, error_line=error_line))
+    await channel.send(SALES_REPORT_TEMPLATE.format(
+        form_line=form_line,
+        reply_line=reply_line,
+        negotiation_line=negotiation_line,
+        deal_line=deal_line,
+        goal_rate_line=goal_rate_line,
+    ))
     logger.info("Posted sales report template to #%s", channel.name)
 
 
