@@ -1,7 +1,7 @@
-// 営業進捗報告テンプレートの自動集計項目の参照先
-const SALES_SUMMARY_SPREADSHEET_ID = "1rL8R3WOPBSJ2WRgziUS2lbLinAs4n0hhCOEc3YEoYvY";
-const SALES_SUMMARY_SHEET_NAME = "完了件数集計"; // 「フォーム送信：」用
-const SALES_LIST_SHEET_NAME = "営業リスト・送信管理"; // 「エラー・未送信件数：」用
+// 営業進捗報告テンプレートの自動集計項目の参照先（「営業リスト・送信管理」シートから直接集計する）
+const SALES_SUMMARY_SPREADSHEET_ID = "1G1Zo4eBYp77R7gFckV-TZNY5qF-p_ZcMYY6BUK8xKYg";
+const SALES_LIST_SHEET_NAME = "営業リスト・送信管理";
+const SALES_SENT_STATUS = "送信済み";
 const SALES_LIST_ERROR_STATUSES = new Set(["エラー", "未送信", ""]); // 空欄（未入力）も未対応として扱う
 
 // 報告・勤怠の記録先は必ずシート名で指定する（getActiveSheet()にフォールバックしない）。
@@ -86,82 +86,56 @@ function doGet(e) {
 
 function getSalesSummary() {
   const ss = SpreadsheetApp.openById(SALES_SUMMARY_SPREADSHEET_ID);
-  const sheet = ss.getSheetByName(SALES_SUMMARY_SHEET_NAME);
+  const sheet = ss.getSheetByName(SALES_LIST_SHEET_NAME);
   if (!sheet) {
-    return jsonOutput({ error: "sheet not found: " + SALES_SUMMARY_SHEET_NAME });
+    return jsonOutput({ error: "sheet not found: " + SALES_LIST_SHEET_NAME });
   }
 
   const values = sheet.getDataRange().getValues();
 
-  // 「対応者 / リスト作成件数 / フォーム送信件数（送信済みのみ）」のヘッダー行を探す
-  // （説明文などが上に入っていても対応できるよう、位置固定にしない）
+  // 「企業名 / リスト作成者 / フォーム送信者 / 送信ステータス」のヘッダー行を探す
+  // （位置固定にしない）
   let headerRow = -1;
-  let colList = -1;
-  let colForm = -1;
+  let colCompany = -1;
+  let colListCreator = -1;
+  let colFormSender = -1;
+  let colStatus = -1;
   for (let r = 0; r < values.length; r++) {
     const row = values[r];
-    const idxList = row.indexOf("リスト作成件数");
-    const idxForm = row.findIndex(v => typeof v === "string" && v.indexOf("フォーム送信件数") === 0);
-    if (idxList !== -1 && idxForm !== -1) {
+    const idxCompany = row.indexOf("企業名");
+    const idxList = row.indexOf("リスト作成者");
+    const idxForm = row.indexOf("フォーム送信者");
+    const idxStatus = row.indexOf("送信ステータス");
+    if (idxCompany !== -1 && idxList !== -1 && idxForm !== -1 && idxStatus !== -1) {
       headerRow = r;
-      colList = idxList;
-      colForm = idxForm;
+      colCompany = idxCompany;
+      colListCreator = idxList;
+      colFormSender = idxForm;
+      colStatus = idxStatus;
       break;
     }
   }
 
   if (headerRow === -1) {
-    return jsonOutput({ error: "header row not found in " + SALES_SUMMARY_SHEET_NAME });
+    return jsonOutput({ error: "header row not found in " + SALES_LIST_SHEET_NAME });
   }
 
   let listTotal = 0;
   let formTotal = 0;
+  let errorUnsentCount = 0;
   for (let r = headerRow + 1; r < values.length; r++) {
-    const person = values[r][0];
-    if (!person || person === "合計") continue; // 集計済みの合計行は二重加算しない
-    listTotal += Number(values[r][colList]) || 0;
-    formTotal += Number(values[r][colForm]) || 0;
-  }
+    const row = values[r];
+    const company     = row[colCompany];
+    const listCreator = row[colListCreator];
+    const formSender  = row[colFormSender];
+    const status      = String(row[colStatus] || "").trim();
 
-  const errorUnsentCount = countSalesListErrorsUnsent(ss);
-  if (errorUnsentCount === null) {
-    return jsonOutput({ error: "sheet not found: " + SALES_LIST_SHEET_NAME });
+    if (listCreator) listTotal++;                          // リスト作成件数：リスト作成者が入力済みの行数
+    if (formSender && status === SALES_SENT_STATUS) formTotal++; // フォーム送信件数：フォーム送信者が入力済みかつ送信済みの行数
+    if (company && SALES_LIST_ERROR_STATUSES.has(status)) errorUnsentCount++; // エラー・未送信件数
   }
 
   return jsonOutput({ list_count: listTotal, form_count: formTotal, error_unsent_count: errorUnsentCount });
-}
-
-function countSalesListErrorsUnsent(ss) {
-  const sheet = ss.getSheetByName(SALES_LIST_SHEET_NAME);
-  if (!sheet) return null;
-
-  const values = sheet.getDataRange().getValues();
-
-  // 「企業名 / ... / 送信ステータス」のヘッダー行を探す（位置固定にしない）
-  let headerRow = -1;
-  let colCompany = -1;
-  let colStatus = -1;
-  for (let r = 0; r < values.length; r++) {
-    const row = values[r];
-    const idxCompany = row.indexOf("企業名");
-    const idxStatus = row.indexOf("送信ステータス");
-    if (idxCompany !== -1 && idxStatus !== -1) {
-      headerRow = r;
-      colCompany = idxCompany;
-      colStatus = idxStatus;
-      break;
-    }
-  }
-  if (headerRow === -1) return null;
-
-  let count = 0;
-  for (let r = headerRow + 1; r < values.length; r++) {
-    const company = values[r][colCompany];
-    if (!company) continue; // 企業名が空の行はデータなしとしてスキップ
-    const status = String(values[r][colStatus] || "").trim();
-    if (SALES_LIST_ERROR_STATUSES.has(status)) count++;
-  }
-  return count;
 }
 
 function jsonOutput(obj) {
