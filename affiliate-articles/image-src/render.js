@@ -310,6 +310,24 @@ images.push({
 <div class="pr">PR</div>`,
 });
 
+// 12. X用:学び始める前のチェックリスト(保存されやすい型)
+const checks = ['結果に個人差があると理解した', '使ってよい金額の上限を決めた', '学ぶ時間帯を決めた', '用語をメモする場所を作った', '有料の案内は、その場で決めない'];
+images.push({
+  file: 'x-04.png', w: 1200, h: 675, html: `
+<div class="frame" style="background:#fff;padding:48px 70px">
+  <div style="display:inline-block;background:${C.blue};color:#fff;font-size:22px;font-weight:700;padding:5px 16px;border-radius:6px">保存して見返す用</div>
+  <div class="title" style="font-size:50px;margin-top:14px">学び始める前のチェックリスト</div>
+  <div style="margin-top:26px;display:flex;flex-direction:column;gap:12px">
+    ${checks.map(t => `
+    <div style="display:flex;align-items:center;gap:22px;background:${C.pale};border-radius:12px;padding:13px 26px">
+      <div style="flex:none;width:40px;height:40px;border:4px solid ${C.blue};border-radius:8px;background:#fff"></div>
+      <div style="font-size:31px;font-weight:700;color:${C.text}">${t}</div>
+    </div>`).join('')}
+  </div>
+</div>
+<div class="pr">PR</div>`,
+});
+
 // ---------------------------------------------------------------- 書き出し
 (async () => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
