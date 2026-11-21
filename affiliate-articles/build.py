@@ -33,6 +33,18 @@ for name in ["ameba-01.md", "note-01.md"]:
     (DIST / name).write_text(out, encoding="utf-8")
     print(f"{name}: 本文 約{body_chars(out)}字 / リンク {url}")
 
+
+
+def _expand(body, src):
+    """{SEMINAR_URL} と {BLOG_URL} を、ファイル冒頭の定義で置き換える。字数はURLを23字で数える。"""
+    urls = {k: m.group(1) for k in ("SEMINAR_URL", "BLOG_URL")
+            if (m := re.search(rf"^{k}:\s*(\S+)\s*$", src, re.M))}
+    text, counted = body, body
+    for k, u in urls.items():
+        text = text.replace("{" + k + "}", u)
+        counted = counted.replace("{" + k + "}", "x" * 23)
+    return text, len(counted)
+
 for xname in ["x-posts", "x-threads"]:
     src = (ROOT / f"{xname}.md").read_text(encoding="utf-8")
     url = re.search(r"^SEMINAR_URL:\s*(\S+)\s*$", src, re.M).group(1)
@@ -40,8 +52,7 @@ for xname in ["x-posts", "x-threads"]:
     lines = []
     for title, body in posts:
         body = body.strip()
-        count = len(body.replace("{SEMINAR_URL}", "x" * 23))
-        expanded = body.replace("{SEMINAR_URL}", url)
+        expanded, count = _expand(body, src)
         status = "OK" if count <= 140 else "超過"
         print(f"X {title}: {count}字 {status}")
         lines.append(f"===== {title}({count}字) =====\n{expanded}\n")
@@ -180,8 +191,8 @@ def _x_items(name):
         img = re.search(r"【画像:(.+?)】", sec)
         items.append({
             "title": title,
-            "text": body.replace("{SEMINAR_URL}", url),
-            "count": len(body.replace("{SEMINAR_URL}", "x" * 23)),
+            "text": _expand(body, src)[0],
+            "count": _expand(body, src)[1],
             "img": img.group(1) if img else None,
         })
     return items
