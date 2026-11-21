@@ -53,6 +53,9 @@ const ICON = {
   video: (c = C.blue) => `<svg viewBox="0 0 64 64" width="100%" height="100%"><rect x="8" y="14" width="48" height="34" rx="4" fill="none" stroke="${c}" stroke-width="4"/><path d="M27 23v16l13-8z" fill="${c}"/><path d="M22 54h20" stroke="${c}" stroke-width="4" stroke-linecap="round"/></svg>`,
   seminar: (c = C.blue) => `<svg viewBox="0 0 64 64" width="100%" height="100%"><rect x="16" y="8" width="40" height="26" rx="3" fill="none" stroke="${c}" stroke-width="4"/><circle cx="14" cy="38" r="6" fill="none" stroke="${c}" stroke-width="4"/><path d="M4 58c1-7 5-11 10-11s9 4 10 11" fill="none" stroke="${c}" stroke-width="4" stroke-linecap="round"/><path d="M22 40l10-10" stroke="${c}" stroke-width="4" stroke-linecap="round"/></svg>`,
   clock: (c = C.blue) => `<svg viewBox="0 0 64 64" width="100%" height="100%"><circle cx="32" cy="32" r="22" fill="none" stroke="${c}" stroke-width="4"/><path d="M32 18v14l9 6" fill="none" stroke="${c}" stroke-width="4" stroke-linecap="round"/></svg>`,
+  mail: (c = C.blue) => `<svg viewBox="0 0 64 64" width="100%" height="100%"><rect x="8" y="14" width="48" height="36" rx="4" fill="none" stroke="${c}" stroke-width="4"/><path d="M10 18l22 17 22-17" fill="none" stroke="${c}" stroke-width="4" stroke-linejoin="round"/></svg>`,
+  chat: (c = C.blue) => `<svg viewBox="0 0 64 64" width="100%" height="100%"><path d="M32 10C18 10 8 18.5 8 29c0 6.5 4 12.2 10 15.6V55l10-7.4c1.3.2 2.6.3 4 .3 14 0 24-8.5 24-19S46 10 32 10z" fill="none" stroke="${c}" stroke-width="4" stroke-linejoin="round"/><circle cx="22" cy="29" r="3.5" fill="${c}"/><circle cx="32" cy="29" r="3.5" fill="${c}"/><circle cx="42" cy="29" r="3.5" fill="${c}"/></svg>`,
+  tap: (c = C.blue) => `<svg viewBox="0 0 64 64" width="100%" height="100%"><rect x="6" y="12" width="40" height="18" rx="9" fill="none" stroke="${c}" stroke-width="4"/><path d="M30 26v-0c0-2.5 4-2.5 4 0v12l3-1c2-.6 4 .8 4 2.8l1 0c3 0 6 2 6 5v5c0 5-4 9-9 9h-4c-3 0-5.5-1.5-7-4l-6-9c-1.2-2 1-4.2 3-3l5 3z" fill="#fff" stroke="${c}" stroke-width="3.5" stroke-linejoin="round"/></svg>`,
   check: (c = C.blue) => `<svg viewBox="0 0 64 64" width="100%" height="100%"><circle cx="32" cy="32" r="24" fill="${c}"/><path d="M21 33l8 8 15-17" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 };
 
@@ -269,7 +272,7 @@ images.push({
       <div style="font-size:15px;font-weight:700;margin-top:4px">約30分</div>
     </div>
     <div style="position:relative;flex:1">
-      <div style="font-size:21px;font-weight:700;color:#D9EAFB;letter-spacing:.04em">メール登録後、すぐに視聴できます</div>
+      <div style="font-size:21px;font-weight:700;color:#D9EAFB;letter-spacing:.04em">登録後、すぐに視聴できます</div>
       <div style="font-size:35px;font-weight:900;letter-spacing:.02em;margin-top:4px;white-space:nowrap;text-shadow:0 2px 0 rgba(0,0,0,.18)">無料動画セミナーの概要を見る</div>
     </div>
     <div style="position:relative;flex:none;width:62px;height:62px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center">
@@ -280,6 +283,32 @@ images.push({
 <div class="pr" style="right:22px;bottom:10px;font-size:15px">PR</div>`,
 });
 
+
+// 11. 登録までのステップ(実際の画面の流れに沿った説明)
+const stepCard = (n, icon, h, t) => `
+  <div style="flex:1;background:#fff;border-radius:18px;box-shadow:0 4px 16px rgba(23,54,90,.08);padding:22px 14px 20px;text-align:center;position:relative">
+    <div style="position:absolute;left:50%;top:-20px;transform:translateX(-50%);background:${C.navy};color:#fff;font-weight:900;font-size:19px;border-radius:20px;padding:4px 16px">STEP ${n}</div>
+    <div style="width:74px;height:74px;margin:10px auto 0">${ICON[icon]()}</div>
+    <div style="font-size:27px;font-weight:900;color:${C.navy};margin-top:10px;line-height:1.35">${h}</div>
+    <div style="font-size:19px;color:${C.sub};margin-top:8px;line-height:1.5">${t}</div>
+  </div>`;
+images.push({
+  file: 'steps-01.png', w: 1200, h: 520, html: `
+<div class="frame" style="background:${C.bg};padding:40px 48px">
+  <div class="title" style="font-size:40px">無料動画セミナー 視聴までの流れ</div>
+  <div style="display:flex;align-items:center;gap:10px;margin-top:44px">
+    ${stepCard(1, 'tap', 'ボタンから<br>LPへ', '記事内のボタンを<br>押して移動')}
+    ${arrowR(34)}
+    ${stepCard(2, 'mail', 'メールアドレス<br>を登録', '普段お使いの<br>ご自身のアドレスで')}
+    ${arrowR(34)}
+    ${stepCard(3, 'chat', '公式LINEに<br>登録', '登録後、LINEの<br>画面に移動します')}
+    ${arrowR(34)}
+    ${stepCard(4, 'video', 'すぐに<br>動画を視聴', '約30分の<br>動画セミナー')}
+  </div>
+  <div style="position:absolute;left:48px;bottom:20px;font-size:18px;color:${C.sub}">※登録後に、商品の案内がある場合があります。結果には個人差があります。</div>
+</div>
+<div class="pr">PR</div>`,
+});
 
 // ---------------------------------------------------------------- 書き出し
 (async () => {
