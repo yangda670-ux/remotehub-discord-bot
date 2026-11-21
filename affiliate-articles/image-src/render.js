@@ -272,7 +272,7 @@ images.push({
       <div style="font-size:15px;font-weight:700;margin-top:4px">約30分</div>
     </div>
     <div style="position:relative;flex:1">
-      <div style="font-size:21px;font-weight:700;color:#D9EAFB;letter-spacing:.04em">登録後、すぐに視聴できます</div>
+      <div style="font-size:21px;font-weight:700;color:#D9EAFB;letter-spacing:.04em">興味があれば、よかったら</div>
       <div style="font-size:35px;font-weight:900;letter-spacing:.02em;margin-top:4px;white-space:nowrap;text-shadow:0 2px 0 rgba(0,0,0,.18)">無料動画セミナーの概要を見る</div>
     </div>
     <div style="position:relative;flex:none;width:62px;height:62px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center">
@@ -299,11 +299,11 @@ images.push({
   <div style="display:flex;align-items:center;gap:10px;margin-top:44px">
     ${stepCard(1, 'tap', 'ボタンから<br>LPへ', '記事内のボタンを<br>押して移動')}
     ${arrowR(34)}
-    ${stepCard(2, 'mail', 'メールアドレス<br>を登録', '普段お使いの<br>ご自身のアドレスで')}
+    ${stepCard(2, 'seminar', 'LPで<br>内容を確認', 'セミナーの概要や<br>注意書きを読む')}
     ${arrowR(34)}
-    ${stepCard(3, 'chat', '公式LINEに<br>登録', '登録後、LINEの<br>画面に移動します')}
+    ${stepCard(3, 'chat', '案内に沿って<br>登録', 'メールアドレスと<br>公式LINEの登録')}
     ${arrowR(34)}
-    ${stepCard(4, 'video', 'すぐに<br>動画を視聴', '約30分の<br>動画セミナー')}
+    ${stepCard(4, 'video', '動画セミナーを<br>視聴', '約30分<br>視聴は無料です')}
   </div>
   <div style="position:absolute;left:48px;bottom:20px;font-size:18px;color:${C.sub}">※登録後に、商品の案内がある場合があります。結果には個人差があります。</div>
 </div>
