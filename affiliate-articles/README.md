@@ -19,6 +19,8 @@
 | note-01.md | note用記事(「始める前に知っておきたい5つのこと」+スキマ時間の学び方) |
 | x-posts.md | X用投稿 5本(各140字以内、URLは23字換算) |
 | dist/ | リンク展開済みの貼り付け用ファイル(build.py で生成) |
+| dist/ameba-01.html | Amebaの「HTML表示」に貼り付けるHTML(装飾はインラインstyle) |
+| dist/ameba-01-preview.html | 上記HTMLの、画像入りプレビュー |
 | images/*.png | 記事用画像 10枚 |
 | image-src/render.js | 画像のデザイン元(HTML/CSS/SVG → PNG)。`node image-src/render.js` で再生成 |
 
@@ -38,3 +40,10 @@
 | button-01.png(無料動画セミナーの概要を見る) | 800×200 | Ameba・note | まとめ/おわりの、リンクの直前 |
 
 すべての画像は、落ち着いた青系・Noto Sans JP で作成し、右下に小さく「PR」を入れています。セミナーの手法や収益に関する図、講師の写真、他社ロゴは使っていません。
+
+## Amebaへの貼り付け手順(HTML)
+
+1. Amebaの画像フォルダに、Ameba用の画像(ameba-01-header / diagram-01 / diagram-02 / button-01)をアップロードします。
+2. `dist/ameba-01.html` を開き、`<!-- ▼画像:… -->` の直後にある `src="images/…"` を、アップロードした画像のURLに差し替えます。
+3. 記事タイトルは、ファイル1行目のコメントにある文言を、Amebaのタイトル欄に入れます。
+4. エディタの「HTML表示」タブに切り替え、残りの内容をすべて貼り付けます。
