@@ -331,3 +331,22 @@ document.addEventListener('click', async e => {{
 </body></html>'''
 (DIST / "index.html").write_text(page, encoding="utf-8")
 print(f"index.html を出力しました({len(page)//1024}KB)")
+
+
+# ---------------------------------------------------------------- Amebaだけの一式(dist/ameba-kit と ameba-kit.zip)
+import shutil
+import zipfile
+
+KIT = DIST / "ameba-kit"
+shutil.rmtree(KIT, ignore_errors=True)
+(KIT / "images").mkdir(parents=True)
+for n in sorted(set(re.findall(r"【画像:(.+?)】", (ROOT / "ameba-01.md").read_text(encoding="utf-8")))):
+    shutil.copy(ROOT / "images" / n, KIT / "images" / n)
+shutil.copy(DIST / "ameba-01.html", KIT / "ameba-01.html")
+(KIT / "title.txt").write_text(a_title + "\n", encoding="utf-8")
+shutil.copy(ROOT / "image-src" / "ameba-kit-手順.txt", KIT / "手順.txt")
+with zipfile.ZipFile(DIST / "ameba-kit.zip", "w", zipfile.ZIP_DEFLATED) as z:
+    for f in sorted(KIT.rglob("*")):
+        if f.is_file():
+            z.write(f, f.relative_to(DIST))
+print("ameba-kit.zip を出力しました")
