@@ -22,6 +22,7 @@
 | dist/ | リンク展開済みの貼り付け用ファイル(build.py で生成) |
 | dist/ameba-01.html | Amebaの「HTML表示」に貼り付けるHTML(装飾はインラインstyle) |
 | dist/ameba-01-preview.html | 上記HTMLの、画像入りプレビュー |
+| dist/index.html | まとめページ(Ameba・note・X投稿・スレッド・画像をタブで確認し、ボタンでコピー。画像埋め込み済み) |
 | images/*.png | 記事用画像 12枚 |
 | image-src/render.js | 画像のデザイン元(HTML/CSS/SVG → PNG)。`node image-src/render.js` で再生成 |
 
