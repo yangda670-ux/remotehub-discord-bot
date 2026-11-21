@@ -33,18 +33,19 @@ for name in ["ameba-01.md", "note-01.md"]:
     (DIST / name).write_text(out, encoding="utf-8")
     print(f"{name}: 本文 約{body_chars(out)}字 / リンク {url}")
 
-src = (ROOT / "x-posts.md").read_text(encoding="utf-8")
-url = re.search(r"^SEMINAR_URL:\s*(\S+)\s*$", src, re.M).group(1)
-posts = re.findall(r"^## (.+?)\n.*?```\n(.*?)```", src, re.S | re.M)
-lines = []
-for title, body in posts:
-    body = body.strip()
-    count = len(body.replace("{SEMINAR_URL}", "x" * 23))
-    expanded = body.replace("{SEMINAR_URL}", url)
-    status = "OK" if count <= 140 else "超過"
-    print(f"X {title}: {count}字 {status}")
-    lines.append(f"===== {title}({count}字) =====\n{expanded}\n")
-(DIST / "x-posts.txt").write_text("\n".join(lines), encoding="utf-8")
+for xname in ["x-posts", "x-threads"]:
+    src = (ROOT / f"{xname}.md").read_text(encoding="utf-8")
+    url = re.search(r"^SEMINAR_URL:\s*(\S+)\s*$", src, re.M).group(1)
+    posts = re.findall(r"^## (.+?)\n.*?```\n(.*?)```", src, re.S | re.M)
+    lines = []
+    for title, body in posts:
+        body = body.strip()
+        count = len(body.replace("{SEMINAR_URL}", "x" * 23))
+        expanded = body.replace("{SEMINAR_URL}", url)
+        status = "OK" if count <= 140 else "超過"
+        print(f"X {title}: {count}字 {status}")
+        lines.append(f"===== {title}({count}字) =====\n{expanded}\n")
+    (DIST / f"{xname}.txt").write_text("\n".join(lines), encoding="utf-8")
 
 
 # ---------------------------------------------------------------- Ameba用HTML
