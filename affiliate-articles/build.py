@@ -105,6 +105,15 @@ def _blocks(text, url, img_prefix):
                 img = f'<a href="{url}" target="_blank" rel="noopener sponsored">{img}</a>'
             out.append(f"<!-- ▼画像:{name}(Amebaに画像をアップロードしたら、src をそのURLに差し替えてください) -->\n"
                        f'<div style="{S["fig"]}">{img}</div>')
+        elif first.startswith("▶ ") and "[seminar]" in first:
+            label = re.search(r"\[([^\]]+)\]\[seminar\]", first).group(1)
+            out.append(
+                f'<p style="text-align:center;margin:0 0 1.4em;">'
+                f'<a href="{url}" target="_blank" rel="noopener sponsored" style="display:inline-block;background:#2A6DB5;color:#fff;'
+                f'font-weight:bold;font-size:1.05em;text-decoration:none;padding:0.85em 1.8em;border-radius:999px;'
+                f'box-shadow:0 4px 0 #123A66;line-height:1.5;">'
+                f'<span style="display:inline-block;background:#FFD45C;color:#17365A;font-size:0.8em;border-radius:4px;padding:0.1em 0.5em;margin-right:0.6em;">無料・約30分</span>'
+                f'{_html.escape(label)} ›</a></p>')
         elif first.startswith("PR(") or first == "**PR(アフィリエイトリンクを含みます)**":
             out.append(f'<p><span style="{S["pr"]}">PR(アフィリエイトリンクを含みます)</span></p>')
         else:

@@ -254,20 +254,32 @@ images.push({
 <div class="pr">PR</div>`,
 });
 
-// 10. 案内ボタン風画像
+// 10. 案内ボタン風画像(「無料」「約30分」が目に入るデザイン。文言は控えめに)
 images.push({
-  file: 'button-01.png', w: 800, h: 200, html: `
+  file: 'button-01.png', w: 840, h: 250, html: `
 <div style="position:absolute;inset:0;background:#fff;display:flex;align-items:center;justify-content:center">
-  <div style="width:700px;height:110px;border-radius:55px;background:linear-gradient(180deg,${C.blue} 0%,${C.navy} 100%);box-shadow:0 6px 0 #0F2740, 0 10px 20px rgba(23,54,90,.18);
-    display:flex;align-items:center;justify-content:center;gap:18px;color:#fff">
-    <div style="width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center">
-      <svg width="20" height="22" viewBox="0 0 20 22"><path d="M3 2l15 9-15 9z" fill="#fff"/></svg></div>
-    <div style="font-size:36px;font-weight:700;letter-spacing:.04em">無料動画セミナーの概要を見る</div>
-    <svg width="18" height="28" viewBox="0 0 18 28"><path d="M3 3l11 11L3 25" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <div style="position:relative;width:780px;height:150px;border-radius:75px;
+    background:linear-gradient(180deg,#3B8AD8 0%,#2A6DB5 48%,#1F5A9C 52%,#1B4F8A 100%);
+    box-shadow:0 7px 0 #123A66, 0 14px 26px rgba(23,54,90,.28);
+    display:flex;align-items:center;padding:0 28px 0 26px;gap:22px;color:#fff;overflow:hidden">
+    <div style="position:absolute;left:40px;right:40px;top:5px;height:46px;border-radius:40px;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0))"></div>
+    <div style="position:relative;flex:none;width:104px;height:104px;border-radius:50%;background:#FFD45C;color:#17365A;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 -4px 0 rgba(0,0,0,.12);transform:rotate(-8deg)">
+      <div style="font-size:36px;font-weight:900;line-height:1">無料</div>
+      <div style="font-size:15px;font-weight:700;margin-top:4px">約30分</div>
+    </div>
+    <div style="position:relative;flex:1">
+      <div style="font-size:21px;font-weight:700;color:#D9EAFB;letter-spacing:.04em">メール登録後、すぐに視聴できます</div>
+      <div style="font-size:35px;font-weight:900;letter-spacing:.02em;margin-top:4px;white-space:nowrap;text-shadow:0 2px 0 rgba(0,0,0,.18)">無料動画セミナーの概要を見る</div>
+    </div>
+    <div style="position:relative;flex:none;width:62px;height:62px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center">
+      <svg width="22" height="30" viewBox="0 0 22 30"><path d="M5 4l12 11L5 26" fill="none" stroke="#1F5A9C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
   </div>
 </div>
-<div class="pr" style="right:20px;bottom:12px;font-size:15px">PR</div>`,
+<div class="pr" style="right:22px;bottom:10px;font-size:15px">PR</div>`,
 });
+
 
 // ---------------------------------------------------------------- 書き出し
 (async () => {
