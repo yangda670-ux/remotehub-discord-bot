@@ -303,7 +303,7 @@ images.push({
     ${arrowR(34)}
     ${stepCard(3, 'chat', '案内に沿って<br>登録', 'メールアドレスと<br>公式LINEの登録')}
     ${arrowR(34)}
-    ${stepCard(4, 'video', '動画セミナーを<br>視聴', '約30分<br>視聴は無料です')}
+    ${stepCard(4, 'video', '動画セミナーを<br>視聴', '約30分<br>受講は無料です')}
   </div>
   <div style="position:absolute;left:48px;bottom:20px;font-size:18px;color:${C.sub}">※登録後に、商品の案内がある場合があります。結果には個人差があります。</div>
 </div>
