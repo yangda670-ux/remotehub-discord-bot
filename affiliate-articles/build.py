@@ -377,7 +377,9 @@ for art in AMEBA:
     for n in sorted(set(re.findall(r"【画像:(.+?)】", (ROOT / f"{art}.md").read_text(encoding="utf-8")))):
         shutil.copy(ROOT / "images" / n, KIT / "images" / n)
     shutil.copy(DIST / f"{art}.html", KIT / f"{art}.html")
-    (KIT / "title.txt").write_text(ameba_titles[art] + "\n", encoding="utf-8")
+    seo = re.search(r"^検索表示タイトル:(.+)$", (ROOT / f"{art}.md").read_text(encoding="utf-8"), re.M)
+    (KIT / "title.txt").write_text(
+        f"記事タイトル:{ameba_titles[art]}\n" + (f"検索表示タイトル:{seo.group(1)}\n" if seo else ""), encoding="utf-8")
     shutil.copy(ROOT / "image-src" / "ameba-kit-手順.txt", KIT / "手順.txt")
     with zipfile.ZipFile(DIST / f"{kit_name}.zip", "w", zipfile.ZIP_DEFLATED) as z:
         for f in sorted(KIT.rglob("*")):
