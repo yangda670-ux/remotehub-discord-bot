@@ -197,7 +197,6 @@ def _article(name):
 
 def _x_items(name):
     src = (ROOT / name).read_text(encoding="utf-8")
-    url = re.search(r"^SEMINAR_URL:\s*(\S+)\s*$", src, re.M).group(1)
     items = []
     for sec in re.split(r"^## ", src, flags=re.M)[1:]:
         title = sec.split("\n", 1)[0].strip()
@@ -227,7 +226,7 @@ def _x_cards(items):
     out = []
     for it in items:
         img = f'<img data-img="{_esc(it["img"])}" alt="{_esc(it["img"])}">' if it["img"] else ""
-        cls = "ok" if it["count"] <= 140 else "ng"
+        cls = "ok" if it["count"] <= it.get("limit", 140) else "ng"
         out.append(f'''<article class="xcard">
   <header><h3>{_esc(it["title"])}</h3><span class="count {cls}">{it["count"]}字</span></header>
   <pre>{_esc(it["text"])}</pre>{img}
@@ -256,6 +255,10 @@ n_preview = _embed_imgs(_blocks(n_body, n_url, "images/"))
 
 x_posts = _x_items("x-posts.md")
 x_threads = _x_items("x-threads.md")
+threads_items = _x_items("threads-posts.md")
+for _it in threads_items:  # Threadsは500字まで。URLもそのままの長さで数える
+    _it["count"] = len(_it["text"])
+    _it["limit"] = 500
 img_names = sorted(p.name for p in (ROOT / "images").glob("*.png"))
 img_grid = "\n".join(
     f'<figure><img data-img="{n}" alt="{n}"><figcaption>{n}'
@@ -309,6 +312,7 @@ h2.sub{{font-size:1rem;color:var(--navy);margin:22px 0 10px}}
   <button role="tab" data-tab="note">note</button>
   <button role="tab" data-tab="xposts">X投稿({len(x_posts)})</button>
   <button role="tab" data-tab="xthreads">Xスレッド</button>
+  <button role="tab" data-tab="threads">Threads</button>
   <button role="tab" data-tab="images">画像({len(img_names)})</button>
 </nav>
 
@@ -331,6 +335,13 @@ h2.sub{{font-size:1rem;color:var(--navy);margin:22px 0 10px}}
   <div class="xgrid">{_x_cards([i for i in x_threads if i["title"].startswith("A-")])}</div>
   <h2 class="sub">スレッドB:学び始める前に知っておきたい5つのこと</h2>
   <div class="xgrid">{_x_cards([i for i in x_threads if i["title"].startswith("B-")])}</div>
+  <h2 class="sub">スレッドC:無料の動画セミナーを活かすコツ(Ameba 2記事目)</h2>
+  <div class="xgrid">{_x_cards([i for i in x_threads if i["title"].startswith("C-")])}</div>
+</section>
+
+<section id="threads">
+  <p class="note">Threads(Meta)用です。500字まで書け、リンクは本文に置けます。字数はそのまま数えています。</p>
+  <div class="xgrid">{_x_cards(threads_items)}</div>
 </section>
 
 <section id="images">
@@ -386,3 +397,12 @@ for art in AMEBA:
             if f.is_file():
                 z.write(f, f.relative_to(DIST))
     print(f"{kit_name}.zip を出力しました")
+
+
+# ---------------------------------------------------------------- Threads(Meta)用の貼り付けファイル
+_lines = []
+for _it in _x_items("threads-posts.md"):
+    _n = len(_it["text"])
+    print(f"Threads {_it['title']}: {_n}字 {'OK' if _n <= 500 else '超過'}")
+    _lines.append(f"===== {_it['title']}({_n}字) =====\n{_it['text']}\n")
+(DIST / "threads-posts.txt").write_text("\n".join(_lines), encoding="utf-8")
