@@ -23,13 +23,22 @@ def body_chars(text: str) -> int:
     return len(t)
 
 
-for name in ["ameba-01.md", "note-01.md"]:
+AMEBA = ["ameba-01", "ameba-02"]  # Amebaの記事。増えたらここに追加
+
+
+def _refs(src):
+    """冒頭の参照リンク定義([key]: URL)を辞書で返す。"""
+    return dict(re.findall(r"^\[(\w+)\]:\s*(\S+)\s*$", src, re.M))
+
+
+for name in [f"{a}.md" for a in AMEBA] + ["note-01.md"]:
     src = (ROOT / name).read_text(encoding="utf-8")
-    m = re.search(r"^\[seminar\]:\s*(\S+)\s*$", src, re.M)
-    url = m.group(1)
+    refs = _refs(src)
+    url = refs["seminar"]
     out = re.sub(r"<!--.*?-->\n*", "", src, flags=re.S)
-    out = re.sub(r"^\[seminar\]:.*\n+", "", out, flags=re.M)
+    out = re.sub(r"^\[\w+\]:.*\n+", "", out, flags=re.M)
     out = re.sub(r"\[([^\]]+)\]\[seminar\]", rf"\1\n{url}", out)
+    out = re.sub(r"\[([^\]]+)\]\[(\w+)\]", lambda m: f"{m.group(1)}({refs.get(m.group(2), '')})", out)
     (DIST / name).write_text(out, encoding="utf-8")
     print(f"{name}: 本文 約{body_chars(out)}字 / リンク {url}")
 
@@ -77,10 +86,14 @@ S = {
 }
 
 
+REFS = {}  # 記事ごとの参照リンク(seminar以外)
+
+
 def _inline(t, url):
     t = _html.escape(t, quote=False)
     t = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
     t = re.sub(r"\[([^\]]+)\]\[seminar\]", rf'<a href="{url}" target="_blank" rel="noopener sponsored" style="{S["link"]}">\1</a>', t)
+    t = re.sub(r"\[([^\]]+)\]\[(\w+)\]", lambda m: f'<a href="{REFS.get(m.group(2), "#")}" style="{S["link"]}">{m.group(1)}</a>', t)
     t = re.sub(r"(?<![\"=])(https://willaugh\.com)", r'<a href="\1" target="_blank" rel="noopener">\1</a>', t)
     return t
 
@@ -133,24 +146,26 @@ def _blocks(text, url, img_prefix):
     return "\n".join(out)
 
 
-src = (ROOT / "ameba-01.md").read_text(encoding="utf-8")
-url = re.search(r"^\[seminar\]:\s*(\S+)\s*$", src, re.M).group(1)
-body = re.sub(r"<!--.*?-->\n*", "", src, flags=re.S)
-body = re.sub(r"^\[seminar\]:.*\n+", "", body, flags=re.M)
-title = re.search(r"^# (.+)$", body, re.M).group(1)
-body = re.sub(r"^# .+\n+", "", body, count=1, flags=re.M)  # タイトルはAmebaのタイトル欄に入れる
+for art in AMEBA:
+    src = (ROOT / f"{art}.md").read_text(encoding="utf-8")
+    REFS = _refs(src)
+    url = REFS["seminar"]
+    body = re.sub(r"<!--.*?-->\n*", "", src, flags=re.S)
+    body = re.sub(r"^\[\w+\]:.*\n+", "", body, flags=re.M)
+    title = re.search(r"^# (.+)$", body, re.M).group(1)
+    body = re.sub(r"^# .+\n+", "", body, count=1, flags=re.M)  # タイトルはAmebaのタイトル欄に入れる
 
-fragment = _blocks(body, url, "images/")
-(DIST / "ameba-01.html").write_text(
-    f"<!-- Amebaのタイトル欄:{title} -->\n<!-- 以下を、Amebaブログのエディタの「HTML表示」に貼り付けてください -->\n{fragment}\n",
-    encoding="utf-8")
-preview = _blocks(body, url, "../images/")
-(DIST / "ameba-01-preview.html").write_text(
-    f'<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-    f"<title>Ameba記事プレビュー</title></head><body style=\"background:#fff;color:#1D2B3A;font-family:'Hiragino Sans','Noto Sans JP',sans-serif;"
-    f'max-width:720px;margin:0 auto;padding:24px 16px;font-size:16px\"><h1 style="font-size:1.5em;color:#17365A;line-height:1.5">{_html.escape(title)}</h1>\n{preview}\n</body></html>',
-    encoding="utf-8")
-print("ameba-01.html / ameba-01-preview.html を出力しました")
+    fragment = _blocks(body, url, "images/")
+    (DIST / f"{art}.html").write_text(
+        f"<!-- Amebaのタイトル欄:{title} -->\n<!-- 以下を、Amebaブログのエディタの「HTML表示」に貼り付けてください -->\n{fragment}\n",
+        encoding="utf-8")
+    preview = _blocks(body, url, "../images/")
+    (DIST / f"{art}-preview.html").write_text(
+        f'<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        f"<title>Ameba記事プレビュー</title></head><body style=\"background:#fff;color:#1D2B3A;font-family:'Hiragino Sans','Noto Sans JP',sans-serif;"
+        f'max-width:720px;margin:0 auto;padding:24px 16px;font-size:16px\"><h1 style="font-size:1.5em;color:#17365A;line-height:1.5">{_html.escape(title)}</h1>\n{preview}\n</body></html>',
+        encoding="utf-8")
+    print(f"{art}.html / {art}-preview.html を出力しました")
 
 
 # ---------------------------------------------------------------- まとめページ(dist/index.html)
@@ -169,10 +184,12 @@ def _embed_imgs(fragment):
 
 
 def _article(name):
+    global REFS
     src = (ROOT / name).read_text(encoding="utf-8")
-    url = re.search(r"^\[seminar\]:\s*(\S+)\s*$", src, re.M).group(1)
+    REFS = _refs(src)
+    url = REFS["seminar"]
     body = re.sub(r"<!--.*?-->\n*", "", src, flags=re.S)
-    body = re.sub(r"^\[seminar\]:.*\n+", "", body, flags=re.M)
+    body = re.sub(r"^\[\w+\]:.*\n+", "", body, flags=re.M)
     title = re.search(r"^# (.+)$", body, re.M).group(1)
     body = re.sub(r"^# .+\n+", "", body, count=1, flags=re.M)
     return title, body, url
@@ -219,10 +236,18 @@ def _x_cards(items):
     return "\n".join(out)
 
 
-a_title, a_body, a_url = _article("ameba-01.md")
-a_fragment = _blocks(a_body, a_url, "images/")
-a_html_paste = (DIST / "ameba-01.html").read_text(encoding="utf-8")
-a_preview = _embed_imgs(a_fragment)
+ameba_tabs, ameba_sections, ameba_titles = [], [], {}
+for k, art in enumerate(AMEBA):
+    a_title, a_body, a_url = _article(f"{art}.md")
+    ameba_titles[art] = a_title
+    a_preview = _embed_imgs(_blocks(a_body, a_url, "images/"))
+    a_html_paste = (DIST / f"{art}.html").read_text(encoding="utf-8")
+    ameba_tabs.append(f'<button role="tab" data-tab="{art}" aria-selected="{"true" if k == 0 else "false"}">Ameba {k + 1}</button>')
+    ameba_sections.append(f'''<section id="{art}"{' class="on"' if k == 0 else ''}>
+  <div class="bar">{_copy_btn(a_title, "タイトルをコピー")}{_copy_btn(a_html_paste, "HTMLをコピー(HTML表示に貼り付け)")}</div>
+  <p class="note">コピーしたHTMLの画像は <code>src="images/…"</code> になっています。Amebaに画像をアップロードしたら、そのURLに差し替えてください(目印:<code>&lt;!-- ▼画像:… --&gt;</code>)。</p>
+  <div class="paper"><h2 style="font-size:1.3em;color:#17365A;margin:0 0 1em">{_esc(a_title)}</h2>{a_preview}</div>
+</section>''')
 
 n_title, n_body, n_url = _article("note-01.md")
 n_md = (DIST / "note-01.md").read_text(encoding="utf-8")
@@ -280,18 +305,14 @@ h2.sub{{font-size:1rem;color:var(--navy);margin:22px 0 10px}}
 <h1>記事と投稿のまとめ</h1>
 <p class="lead">記事の確認とコピー用です。元の記事を書き換えたら <code>python3 build.py</code> で、このページも作り直されます。</p>
 <nav role="tablist">
-  <button role="tab" data-tab="ameba" aria-selected="true">Ameba</button>
+  {"".join(ameba_tabs)}
   <button role="tab" data-tab="note">note</button>
   <button role="tab" data-tab="xposts">X投稿({len(x_posts)})</button>
   <button role="tab" data-tab="xthreads">Xスレッド</button>
   <button role="tab" data-tab="images">画像({len(img_names)})</button>
 </nav>
 
-<section id="ameba" class="on">
-  <div class="bar">{_copy_btn(a_title, "タイトルをコピー")}{_copy_btn(a_html_paste, "HTMLをコピー(HTML表示に貼り付け)")}</div>
-  <p class="note">コピーしたHTMLの画像は <code>src="images/…"</code> になっています。Amebaに画像をアップロードしたら、そのURLに差し替えてください(目印:<code>&lt;!-- ▼画像:… --&gt;</code>)。</p>
-  <div class="paper"><h2 style="font-size:1.3em;color:#17365A;margin:0 0 1em">{_esc(a_title)}</h2>{a_preview}</div>
-</section>
+{"".join(ameba_sections)}
 
 <section id="note">
   <div class="bar">{_copy_btn(n_title, "タイトルをコピー")}{_copy_btn(n_md, "本文をコピー(Markdown)")}</div>
@@ -348,16 +369,18 @@ print(f"index.html を出力しました({len(page)//1024}KB)")
 import shutil
 import zipfile
 
-KIT = DIST / "ameba-kit"
-shutil.rmtree(KIT, ignore_errors=True)
-(KIT / "images").mkdir(parents=True)
-for n in sorted(set(re.findall(r"【画像:(.+?)】", (ROOT / "ameba-01.md").read_text(encoding="utf-8")))):
-    shutil.copy(ROOT / "images" / n, KIT / "images" / n)
-shutil.copy(DIST / "ameba-01.html", KIT / "ameba-01.html")
-(KIT / "title.txt").write_text(a_title + "\n", encoding="utf-8")
-shutil.copy(ROOT / "image-src" / "ameba-kit-手順.txt", KIT / "手順.txt")
-with zipfile.ZipFile(DIST / "ameba-kit.zip", "w", zipfile.ZIP_DEFLATED) as z:
-    for f in sorted(KIT.rglob("*")):
-        if f.is_file():
-            z.write(f, f.relative_to(DIST))
-print("ameba-kit.zip を出力しました")
+for art in AMEBA:
+    kit_name = "ameba-kit" if art == "ameba-01" else f"ameba-kit-{art.split('-')[1]}"
+    KIT = DIST / kit_name
+    shutil.rmtree(KIT, ignore_errors=True)
+    (KIT / "images").mkdir(parents=True)
+    for n in sorted(set(re.findall(r"【画像:(.+?)】", (ROOT / f"{art}.md").read_text(encoding="utf-8")))):
+        shutil.copy(ROOT / "images" / n, KIT / "images" / n)
+    shutil.copy(DIST / f"{art}.html", KIT / f"{art}.html")
+    (KIT / "title.txt").write_text(ameba_titles[art] + "\n", encoding="utf-8")
+    shutil.copy(ROOT / "image-src" / "ameba-kit-手順.txt", KIT / "手順.txt")
+    with zipfile.ZipFile(DIST / f"{kit_name}.zip", "w", zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(KIT.rglob("*")):
+            if f.is_file():
+                z.write(f, f.relative_to(DIST))
+    print(f"{kit_name}.zip を出力しました")

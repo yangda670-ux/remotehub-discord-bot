@@ -328,6 +328,64 @@ images.push({
 <div class="pr">PR</div>`,
 });
 
+// 13. Ameba 2記事目 見出し画像
+images.push({
+  file: 'ameba-02-header.png', w: 1200, h: 630, html: `
+<div class="frame" style="background:linear-gradient(135deg,#FFFFFF 0%,${C.pale} 55%,${C.light} 100%)">
+  <div style="position:absolute;right:-90px;top:-90px;width:420px;height:420px;border-radius:50%;background:${C.light};opacity:.7"></div>
+  <div style="position:relative;display:inline-block;background:${C.navy};color:#fff;font-size:26px;font-weight:700;padding:8px 22px;border-radius:6px;letter-spacing:.08em">学び方の整理</div>
+  <div class="title" style="position:relative;font-size:68px;line-height:1.3;margin-top:36px">無料の動画セミナーを<br>上手に活かすコツ</div>
+  <div style="position:relative;font-size:34px;font-weight:700;color:${C.blue};margin-top:24px">見る前・見ている間・見たあとのチェックポイント</div>
+  <div style="position:absolute;right:80px;top:150px;width:230px;height:230px;background:#fff;border-radius:40px;padding:44px;box-shadow:0 8px 24px rgba(23,54,90,.12)">${ICON.video()}</div>
+  <div style="position:absolute;left:64px;bottom:48px;width:120px;height:6px;background:${C.blue};border-radius:3px"></div>
+</div>
+<div class="pr">PR</div>`,
+});
+
+// 14. 図解:無料セミナーの良いところと、気をつけたいところ
+const proscons = (title, items, accent, icon) => `
+  <div style="flex:1;background:#fff;border-radius:18px;border-top:10px solid ${accent};box-shadow:0 4px 16px rgba(23,54,90,.08);padding:26px 30px">
+    <div style="display:flex;align-items:center;gap:14px"><div style="width:52px;height:52px">${icon}</div>
+      <div style="font-size:34px;font-weight:900;color:${C.navy}">${title}</div></div>
+    ${items.map(t => `<div style="display:flex;gap:12px;align-items:flex-start;margin-top:18px;font-size:25px;line-height:1.5">
+      <span style="flex:none;width:12px;height:12px;border-radius:50%;background:${accent};margin-top:13px"></span>${t}</div>`).join('')}
+  </div>`;
+images.push({
+  file: 'diagram-05.png', w: 1200, h: 675, html: `
+<div class="frame" style="background:${C.bg};padding:44px 56px">
+  <div class="title" style="font-size:42px">無料の動画セミナー、良いところと気をつけたいところ</div>
+  <div style="font-size:23px;color:${C.sub};margin-top:6px">「全体像をつかむ場」と考えると、落ち着いて活用しやすくなります</div>
+  <div style="display:flex;gap:26px;margin-top:30px">
+    ${proscons('良いところ', ['費用をかけずに、全体像をつかめる', '講師の考え方や説明の<br>分かりやすさを確かめられる', '自分のペースで、止めたり<br>見返したりできる'], C.blue, ICON.check(C.blue))}
+    ${proscons('気をつけたいところ', ['登録後に、商品の案内が<br>ある場合がある', '動画だけでは、細かい疑問が<br>残ることもある', 'ほかの情報とも<br>比べる必要がある'], C.mid, ICON.clock(C.mid))}
+  </div>
+</div>
+<div class="pr">PR</div>`,
+});
+
+// 15. 図解:約30分の動画を活かす、3つのタイミング
+const phase = (label, h, items) => `
+  <div style="flex:1;background:#fff;border-radius:18px;box-shadow:0 4px 16px rgba(23,54,90,.08);padding:24px 24px;position:relative">
+    <div style="display:inline-block;background:${C.navy};color:#fff;font-size:21px;font-weight:700;padding:4px 16px;border-radius:20px">${label}</div>
+    <div style="font-size:31px;font-weight:900;color:${C.navy};margin-top:14px">${h}</div>
+    ${items.map(t => `<div style="font-size:23px;line-height:1.5;margin-top:14px;padding-left:16px;border-left:4px solid ${C.light};white-space:nowrap">${t}</div>`).join('')}
+  </div>`;
+images.push({
+  file: 'diagram-06.png', w: 1200, h: 675, html: `
+<div class="frame" style="background:${C.bg};padding:70px 50px">
+  <div class="title" style="font-size:42px">約30分の動画を活かす、3つのタイミング</div>
+  <div style="display:flex;align-items:stretch;gap:12px;margin-top:40px">
+    ${phase('見る前', '準備する', ['見る目的を1つ決める', '30分の時間を確保する', 'メモを用意する'])}
+    <div style="align-self:center">${arrowR(38)}</div>
+    ${phase('見ている間', 'メモする', ['気になった点だけ書く', '知らない用語も記録', '事実と意見を分ける'])}
+    <div style="align-self:center">${arrowR(38)}</div>
+    ${phase('見たあと', '整理する', ['答えは見つかったか', '分からなかった点', '時間とお金の見通し'])}
+  </div>
+  <div style="margin-top:34px;background:${C.navy};color:#fff;border-radius:14px;padding:16px 24px;font-size:24px;font-weight:700">有料の案内があっても、その場で決めず、ほかの選択肢と比べてから考えましょう</div>
+</div>
+<div class="pr">PR</div>`,
+});
+
 // ---------------------------------------------------------------- 書き出し
 (async () => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
