@@ -46,7 +46,7 @@ for name in [f"{a}.md" for a in AMEBA] + ["note-01.md"]:
 
 def _expand(body, src):
     """{SEMINAR_URL} と {BLOG_URL} を、ファイル冒頭の定義で置き換える。字数はURLを23字で数える。"""
-    urls = {k: m.group(1) for k in ("SEMINAR_URL", "BLOG_URL")
+    urls = {k: m.group(1) for k in ("SEMINAR_URL", "BLOG_URL", "BLOG2_URL")
             if (m := re.search(rf"^{k}:\s*(\S+)\s*$", src, re.M))}
     text, counted = body, body
     for k, u in urls.items():
